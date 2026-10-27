@@ -40,3 +40,11 @@ def test_load_calls_skips_metadata_and_oneway(tmp_path):
     calls = cnv.load_calls(path)
     assert list(calls.columns) == ["16p11.2_BP4_BP5", "15q11.2-13.1_BP2_BP3"]
     assert calls.index.name == "person_id"
+
+
+def test_classify_exclude_loci(calls):
+    # person 6 carries 3q29 only: NC without exclusion, 'excluded' when 3q29 is excluded
+    classes = {"mirror": ["1q21.1", "16p11.2_BP4_BP5"], "asymmetric": ["17q12"]}
+    groups = cnv.classify(calls, classes, exclude=["3q29"])
+    assert groups[6] == "excluded"
+    assert groups[1] == "NC" and groups[2] == "mirror_DEL"

@@ -38,7 +38,7 @@ def match_loci(names, columns) -> dict:
     return {n: by_key[normalize(n)] for n in names}
 
 
-def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True) -> pd.Series:
+def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True, exclude=()) -> pd.Series:
     """Group label per person from copy-number calls (2 = normal).
 
     `classes` maps a class name to its loci (names are matched to columns with `match_loci`).
@@ -46,6 +46,9 @@ def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True) -> pd.
     or just '<class>' with split_copy=False. People with copy number 2 at every classified locus
     are 'NC'. People carrying CNVs with more than one label are 'multiple'; people with no CNV but
     a missing call at some classified locus get NaN.
+
+    Carriers of any locus in `exclude` are labeled 'excluded' whatever else they carry, so they
+    end up in neither a carrier group nor NC (e.g. common CNVs that would dominate a class).
     """
     carrier = {}
     all_columns = []
@@ -66,4 +69,7 @@ def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True) -> pd.
     groups[n_labels > 1] = "multiple"
     no_cnv = (n_labels == 0) & calls[all_columns].notna().all(axis=1)
     groups[no_cnv] = "NC"
+    if exclude:
+        cn = calls[list(match_loci(exclude, calls.columns).values())]
+        groups[((cn != 2) & cn.notna()).any(axis=1)] = "excluded"
     return groups
