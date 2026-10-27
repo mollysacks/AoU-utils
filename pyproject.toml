@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "aou-utils"
+version = "0.1.0"
+description = "Helper functions for working with data on the All of Us Researcher Workbench"
+readme = "README.md"
+requires-python = ">=3.9"
+# Keep runtime deps empty: the Workbench already ships pandas / google-cloud-bigquery,
+# and pinning them here could clobber the Workbench's versions on install.
+dependencies = []
+
+[project.optional-dependencies]
+bq = ["pandas", "google-cloud-bigquery", "db-dtypes"]
+dev = ["pytest"]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

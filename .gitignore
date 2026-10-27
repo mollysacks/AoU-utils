@@ -1,0 +1,35 @@
+# Python / build
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.venv/
+.ipynb_checkpoints/
+
+# --- Data guard ---
+# This repo is code only. All of Us participant-level data and results must never
+# leave the Workbench, so common data formats are ignored outright.
+*.csv
+*.tsv
+*.txt.gz
+*.parquet
+*.feather
+*.pkl
+*.pickle
+*.h5
+*.h5ad
+*.vcf*
+*.bgen
+*.bed
+*.bim
+*.fam
+*.pgen
+*.pvar
+*.psam
+*.xlsx
+*.png
+*.pdf
+data/
+outputs/
