@@ -34,3 +34,19 @@ def test_forest_draws_one_series_per_group():
     assert len(ax.containers) == 2
     assert [t.get_text() for t in ax.get_yticklabels()] == ["one", "two"]
     plt.close(fig)
+
+
+def test_profile_heatmap_orders_rows_and_labels_cells():
+    from aou_utils.plots import profile_heatmap
+
+    effects = pd.DataFrame({
+        "concept_id": [1, 1, 2, 2, 3, 3], "group": ["a", "b"] * 3,
+        "effect": [0.8, 0.7, -0.5, 0.4, 0.75, 0.72], "q": [0.01, 0.2, 0.01, 0.01, 0.5, np.nan],
+    })
+    fig, ax = plt.subplots()
+    rows = profile_heatmap(ax, effects, [1, 2, 3], ["a", "b"], labels=["x", "y", "z"])
+    assert sorted(rows) == [1, 2, 3]
+    assert abs(rows.index(1) - rows.index(3)) == 1  # similar profiles end up adjacent
+    texts = {t.get_text() for t in ax.texts}
+    assert "+0.80*" in texts and "+0.70" in texts
+    plt.close(fig)
