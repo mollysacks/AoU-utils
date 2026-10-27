@@ -25,7 +25,8 @@ def load_calls(path, id_col: str = "identifier", skip_suffix: str = "_oneway") -
     calls = calls.set_index("person_id")
     if not calls.index.is_unique:
         raise ValueError(f"{path} has duplicate {id_col} values")
-    return calls.astype("Int8")
+    # float32 holds whole-number copy numbers exactly and allows NaN for missing calls
+    return calls.astype("float32")
 
 
 def match_loci(names, columns) -> dict:
