@@ -49,3 +49,20 @@ def test_residualize_removes_covariate_effects(rng):
     assert abs(np.corrcoef(resid[ok], age[ok])[0, 1]) < 0.01
     assert abs(np.corrcoef(resid[ok], sex[ok])[0, 1]) < 0.01
     assert resid.std() == pytest.approx(1, abs=1e-3)
+
+
+def test_coverage_and_complete_cases():
+    present = pd.DataFrame(
+        {10: [True, True, False, True], 11: [True, False, False, True]},
+        index=pd.Index([1, 2, 3, 4], name="person_id"),
+    )
+    groups = pd.Series({1: "DEL", 2: "DEL", 3: "NC", 4: "NC"})
+    counts, fractions = measurements.coverage(present, groups)
+    assert counts.loc[10, "DEL"] == 2 and counts.loc[11, "DEL"] == 1
+    assert fractions.loc[10, "NC"] == 0.5
+
+    score = fractions["DEL"]
+    table = measurements.complete_cases(present, score, groups, [0.5, 1.0])
+    assert table.loc[1.0, "n_measurements"] == 1  # only concept 10 has full DEL coverage
+    assert table.loc[1.0, "complete_DEL"] == 2
+    assert table.loc[0.5, "complete_DEL"] == 1  # needs both 10 and 11

@@ -143,3 +143,49 @@ def residualize(values: pd.DataFrame, ages: pd.DataFrame, covariates: pd.DataFra
     result = pd.DataFrame(out, index=values.index, dtype="float32")
     result.columns.name = values.columns.name
     return result
+
+
+def summarize(medians: pd.DataFrame) -> pd.DataFrame:
+    """Per-measurement table: name, vocabulary, unit, n_people, n_records, pm_fraction.
+
+    pm_fraction is the share of records that came from physical measurements rather than EHR.
+    """
+    concepts = medians.groupby("concept_id").agg(
+        unit_concept_id=("unit_concept_id", "first"),
+        n_people=("person_id", "size"),
+        n_records=("n_records", "sum"),
+        n_pm_records=("n_pm_records", "sum"),
+    )
+    names = concept_names(pd.concat([medians["concept_id"], medians["unit_concept_id"]]))
+    names = names.set_index("concept_id")
+    concepts["name"] = names["concept_name"].reindex(concepts.index).to_numpy()
+    concepts["vocabulary"] = names["vocabulary_id"].reindex(concepts.index).to_numpy()
+    concepts["unit"] = names["concept_name"].reindex(concepts["unit_concept_id"]).to_numpy()
+    concepts["pm_fraction"] = concepts["n_pm_records"] / concepts["n_records"]
+    return concepts
+
+
+def coverage(present: pd.DataFrame, groups: pd.Series):
+    """(counts, fractions) of people with each measurement, as concept x group tables.
+
+    `present` is a person x concept boolean matrix; `groups` maps person_id to a group label.
+    """
+    groups = groups.reindex(present.index)
+    counts = present.groupby(groups).sum().T
+    fractions = counts / groups.value_counts()[counts.columns]
+    return counts, fractions
+
+
+def complete_cases(present: pd.DataFrame, score: pd.Series, groups: pd.Series, cutoffs) -> pd.DataFrame:
+    """For each cutoff, keep measurements with score >= cutoff and count people with all of them.
+
+    Returns one row per cutoff: n_measurements, then n complete in each group.
+    """
+    groups = groups.reindex(present.index)
+    rows = []
+    for cutoff in cutoffs:
+        keep = score.index[score >= cutoff]
+        complete = present[keep].all(axis=1)
+        n = groups[complete].value_counts().reindex(groups.unique(), fill_value=0)
+        rows.append({"cutoff": cutoff, "n_measurements": len(keep), **n.add_prefix("complete_")})
+    return pd.DataFrame(rows).set_index("cutoff")
