@@ -6,4 +6,5 @@
 - Keep `dependencies` in `pyproject.toml` empty or minimal. Never pin packages the Workbench already provides.
 - NEVER commit data, outputs, or anything derived from participant data. This includes hard-coded counts (AoU policy forbids sharing counts of 1–20).
 - Branches: `main` is stable. Use `dev/<project>` for project work. Don't commit to `main` directly when working on a project.
+- Notebooks in `notebooks/` are templates. Commit them with no outputs (enforced by `tests/test_notebooks.py`).
 - Run `pytest` before committing.

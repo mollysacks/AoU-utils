@@ -34,6 +34,16 @@ df = bq.query("SELECT COUNT(*) AS n FROM `{cdr}.person`")
 
 `--no-deps` keeps pip from touching the Workbench's preinstalled pandas/BigQuery. `--force-reinstall` makes sure you get the latest commit, since the version number doesn't change between pushes to a branch.
 
+### Dev notebook
+
+[`notebooks/dev_template.ipynb`](notebooks/dev_template.ipynb) wraps the install, the import and a check of which commit you're running. To get a copy, run this in a Workbench terminal:
+
+```bash
+curl -O https://raw.githubusercontent.com/mollysacks/AoU-utils/main/notebooks/dev_template.ipynb
+```
+
+Set `BRANCH`. After each push, use **Kernel → Restart Kernel and Run All Cells**. No separate restart is needed because the setup cell makes the fresh install importable.
+
 ### Installing from a wheel
 
 pip builds a wheel when installing from git, so the command above is usually all you need. CI also builds one on every push (downloadable from the Actions run). Pushing a `v*` tag attaches the wheel to a GitHub release, which you can install with:
