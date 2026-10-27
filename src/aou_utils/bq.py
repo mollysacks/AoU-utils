@@ -1,6 +1,6 @@
 """BigQuery helpers. Imports are lazy so the package installs and imports off-Workbench."""
 
-from .env import cdr
+from .env import cdr, google_project
 
 
 def query(sql: str, **format_kwargs):
@@ -12,4 +12,5 @@ def query(sql: str, **format_kwargs):
     from google.cloud import bigquery
 
     sql = sql.format(cdr=cdr(), **format_kwargs)
-    return bigquery.Client().query(sql).to_dataframe()
+    # The CDR lives in another project, so bill queries to the workspace project explicitly
+    return bigquery.Client(project=google_project()).query(sql).to_dataframe()
