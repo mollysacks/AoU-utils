@@ -50,8 +50,17 @@ def test_fit_orients_and_loads_on_informative_features(data):
 
 def test_cross_validate(data):
     X, y = data
-    cv = lda.cross_validate(X, y, n_permutations=5)
-    assert cv["auc_pair"] > 0.9
+    cv = lda.cross_validate(X, y, pairs=[("DEL", "DUP"), ("NC", "DEL")], n_permutations=5)
+    assert cv["auc_pairs"]["DEL vs DUP"] > 0.9
+    assert cv["auc_pairs"]["NC vs DEL"] > 0.7
     assert cv["auc_ovr"] > 0.7
     assert cv["permutation_p"] == pytest.approx(1 / 6)
     assert len(cv["permutation_aucs"]) == 5
+
+
+def test_contrast_loadings(data):
+    X, y = data
+    loadings = lda.contrast_loadings(X, y)
+    assert list(loadings.columns) == ["DEL_vs_NC", "DUP_vs_NC"]
+    assert loadings.loc["a", "DEL_vs_NC"] < -0.5 and loadings.loc["a", "DUP_vs_NC"] > 0.5  # mirror on a
+    assert loadings.loc["b", "DEL_vs_NC"] > 0.1 and loadings.loc["b", "DUP_vs_NC"] > 0.1  # shared on b

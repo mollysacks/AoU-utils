@@ -93,14 +93,14 @@ def structure(X: pd.DataFrame, scores: pd.DataFrame) -> pd.DataFrame:
     return pd.DataFrame({axis: X.corrwith(scores[axis]) for axis in scores.columns})
 
 
-def cross_validate(X: pd.DataFrame, y: pd.Series, pair: tuple = ("DEL", "DUP"), n_splits: int = 5,
+def cross_validate(X: pd.DataFrame, y: pd.Series, pairs=(("DEL", "DUP"),), n_splits: int = 5,
                    n_permutations: int = 0, shrinkage="auto", seed: int = 0) -> dict:
     """Out-of-fold AUCs, and optionally a permutation p-value for the overall AUC.
 
     AUC is used rather than accuracy because it doesn't depend on the (very unbalanced) group sizes.
     Returns:
       auc_ovr: macro one-vs-rest AUC over all groups
-      auc_pair: AUC separating pair[0] from pair[1], among people in those two groups
+      auc_pairs: {"a vs b": AUC separating a from b, among people in those two groups} for each pair
       permutation_p, permutation_aucs: if n_permutations > 0, shuffling labels
     """
     from sklearn.metrics import roc_auc_score
@@ -113,11 +113,14 @@ def cross_validate(X: pd.DataFrame, y: pd.Series, pair: tuple = ("DEL", "DUP"), 
     classes = sorted(y.unique())
     proba = pd.DataFrame(proba, index=y.index, columns=classes)
 
-    in_pair = y.isin(pair)
-    pair_score = proba.loc[in_pair, pair[1]] / proba.loc[in_pair, list(pair)].sum(axis=1)
+    auc_pairs = {}
+    for a, b in pairs:
+        in_pair = y.isin([a, b])
+        score = proba.loc[in_pair, b] / proba.loc[in_pair, [a, b]].sum(axis=1)
+        auc_pairs[f"{a} vs {b}"] = roc_auc_score(y[in_pair] == b, score)
     result = {
         "auc_ovr": roc_auc_score(y, proba[classes], multi_class="ovr", average="macro", labels=classes),
-        "auc_pair": roc_auc_score(y[in_pair] == pair[1], pair_score),
+        "auc_pairs": auc_pairs,
     }
     if n_permutations:
         _, perm_scores, p = permutation_test_score(
@@ -127,3 +130,17 @@ def cross_validate(X: pd.DataFrame, y: pd.Series, pair: tuple = ("DEL", "DUP"), 
         result["permutation_p"] = p
         result["permutation_aucs"] = perm_scores
     return result
+
+
+def contrast_loadings(X: pd.DataFrame, y: pd.Series, reference: str = "NC", shrinkage="auto") -> pd.DataFrame:
+    """Loadings of a separate two-group LDA of each group against `reference`.
+
+    Columns are '<group>_vs_<reference>'; each score is oriented so the group scores higher than the
+    reference. Comparing these columns shows which traits each group shifts, and in which direction.
+    """
+    out = {}
+    for g in sorted(set(y.dropna()) - {reference}):
+        m = y.isin([g, reference])
+        result = fit(X[m], y[m], orient=(reference, g), shrinkage=shrinkage)
+        out[f"{g}_vs_{reference}"] = structure(X[m], result.transform(X[m]))["LD1"]
+    return pd.DataFrame(out)
