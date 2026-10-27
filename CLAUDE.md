@@ -7,7 +7,7 @@
 - NEVER commit data, outputs, or anything derived from participant data. This includes hard-coded counts (AoU policy forbids sharing counts of 1–20).
 - Branches: `main` is stable. Use `dev/<project>` for project work. Don't commit to `main` directly when working on a project.
 - Do NOT commit notebooks. Put the logic in package functions, then print the notebook cells in chat for the user to paste. Keep cells short. Start every cell with a comment giving its number and a brief description, e.g. `# Cell 5: cohort` (`%pip` cells too, with the comment on its own line above). The first cells are always: settings (BRANCH, REPO), `%pip install`, then the setup cell that calls `site.addsitedir` and prints the installed commit.
-- Local test env: conda env `aou-utils` (Python 3.12, matching the Workbench). Run tests on a compute node, since the login node often can't import scipy:
+- Local test env: conda env `aou-utils` (Python 3.12). Do NOT submit SLURM jobs to run tests for routine changes: push and let GitHub CI run pytest. Only run tests on a compute node if the user asks.
   `srun --account=ddp195 --partition=ind-shared --qos=ind-shared-normal -N1 -n1 -c2 --mem=8G -t0:15:00 /home/msacks/anaconda3/envs/aou-utils/bin/python -m pytest -q -p no:cacheprovider`
 - Notebook outputs shown to the user must suppress counts 1–20 (`aou_utils.privacy`).
 - Run `pytest` before committing.
