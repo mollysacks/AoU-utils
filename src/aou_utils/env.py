@@ -17,18 +17,28 @@ _CDR_ID = re.compile(r"^C\d{4}Q\dR\d+$")
 _SYSTEM_BUCKET_PREFIXES = ("dataproc-staging-", "dataproc-temp-")
 
 
-@functools.lru_cache(maxsize=None)
-def resources() -> tuple:
-    """The workspace's resources from `wb resource list` (cached for the session)."""
+def _wb_json(*args):
     try:
         out = subprocess.run(
-            ["wb", "resource", "list", "--format=json"], capture_output=True, text=True, check=True
+            ["wb", *args, "--format=json"], capture_output=True, text=True, check=True
         ).stdout
     except FileNotFoundError:
         raise EnvironmentError(
             "The `wb` CLI isn't available. Are you running inside an All of Us Workbench environment?"
         ) from None
-    return tuple(json.loads(out))
+    return json.loads(out)
+
+
+@functools.lru_cache(maxsize=None)
+def resources() -> tuple:
+    """The workspace's resources from `wb resource list` (cached for the session)."""
+    return tuple(_wb_json("resource", "list"))
+
+
+@functools.lru_cache(maxsize=None)
+def workspace() -> dict:
+    """The workspace description from `wb workspace describe` (cached for the session)."""
+    return _wb_json("workspace", "describe")
 
 
 def _only(matches: list, what: str) -> dict:
@@ -68,11 +78,13 @@ def workspace_bucket(resource_id: str = None) -> str:
 
 
 def google_project() -> str:
-    """The workspace's Google billing project."""
+    """The workspace's Google billing project.
+
+    Uses GOOGLE_PROJECT or GOOGLE_CLOUD_PROJECT if set (not every Workbench kernel has them),
+    else `googleProjectId` from `wb workspace describe`.
+    """
     for var in ("GOOGLE_PROJECT", "GOOGLE_CLOUD_PROJECT"):
         if os.environ.get(var):
             return os.environ[var]
-    raise EnvironmentError(
-        "Neither GOOGLE_PROJECT nor GOOGLE_CLOUD_PROJECT is set. "
-        "Are you running inside an All of Us Workbench environment?"
-    )
+    os.environ["GOOGLE_PROJECT"] = workspace()["googleProjectId"]
+    return os.environ["GOOGLE_PROJECT"]

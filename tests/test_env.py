@@ -25,13 +25,17 @@ def clean_env(monkeypatch):
     for var in ("WORKSPACE_CDR", "WORKSPACE_BUCKET", "GOOGLE_PROJECT", "GOOGLE_CLOUD_PROJECT"):
         monkeypatch.delenv(var, raising=False)
     env.resources.cache_clear()
+    env.workspace.cache_clear()
     yield
     env.resources.cache_clear()
+    env.workspace.cache_clear()
 
 
 @pytest.fixture
 def fake_wb(monkeypatch):
     def run(cmd, **kwargs):
+        if cmd[:3] == ["wb", "workspace", "describe"]:
+            return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps({"googleProjectId": "wb-ws-project"}))
         assert cmd[:3] == ["wb", "resource", "list"]
         return subprocess.CompletedProcess(cmd, 0, stdout=json.dumps(RESOURCES))
     monkeypatch.setattr(env.subprocess, "run", run)
@@ -78,3 +82,8 @@ def test_missing_wb_raises(monkeypatch):
     monkeypatch.setattr(env.subprocess, "run", run)
     with pytest.raises(EnvironmentError, match="wb"):
         env.cdr()
+
+
+def test_google_project_from_wb(fake_wb):
+    assert env.google_project() == "wb-ws-project"
+    assert env.os.environ["GOOGLE_PROJECT"] == "wb-ws-project"
