@@ -98,3 +98,33 @@ def profile_heatmap(ax, effects: pd.DataFrame, concepts, order, labels=None, q_c
         side.set_visible(False)
     ax.figure.colorbar(image, ax=ax, shrink=0.6, label="difference from reference (SD)")
     return list(matrix.index)
+
+
+def group_boxes(ax, values: pd.Series, groups: pd.Series, order, reference: str = "NC",
+                max_points: int = 2000, seed: int = 0):
+    """Box plot of `values` per group, with individual values overlaid as jittered points.
+
+    Groups with no values are left out. Points are subsampled to `max_points` per group (so a
+    large reference group doesn't swamp the plot); the reference box is gray, the others blue.
+    Tick labels show each group's n.
+    """
+    rng = np.random.default_rng(seed)
+    values = values.dropna()
+    groups = groups.reindex(values.index)
+    data = {g: values[groups == g].to_numpy() for g in order}
+    data = {g: v for g, v in data.items() if len(v)}
+
+    boxes = ax.boxplot(list(data.values()), positions=range(1, len(data) + 1), widths=0.6,
+                       showfliers=False, patch_artist=True, medianprops={"color": "#0b0b0b"})
+    for patch, g in zip(boxes["boxes"], data):
+        patch.set_facecolor("#c3c2b7" if g == reference else SERIES_COLORS[0])
+        patch.set_alpha(0.35)
+    for i, (g, v) in enumerate(data.items(), start=1):
+        if len(v) > max_points:
+            v = rng.choice(v, max_points, replace=False)
+        ax.scatter(i + rng.uniform(-0.18, 0.18, len(v)), v, s=6, alpha=0.25 if g == reference else 0.7,
+                   color="#52514e" if g == reference else SERIES_COLORS[0], linewidths=0, zorder=3)
+    ax.set_xticks(range(1, len(data) + 1))
+    ax.set_xticklabels([f"{g}\n(n={len(v)})" for g, v in data.items()], fontsize=8)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)

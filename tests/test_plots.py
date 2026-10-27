@@ -50,3 +50,15 @@ def test_profile_heatmap_orders_rows_and_labels_cells():
     texts = {t.get_text() for t in ax.texts}
     assert "+0.80*" in texts and "+0.70" in texts
     plt.close(fig)
+
+
+def test_group_boxes_skips_empty_groups():
+    from aou_utils.plots import group_boxes
+
+    values = pd.Series([1.0, 2.0, 3.0, 10.0, 0.5, np.nan])
+    groups = pd.Series(["NC", "NC", "NC", "a", "a", "b"])
+    fig, ax = plt.subplots()
+    group_boxes(ax, values, groups, ["NC", "a", "b", "c"])
+    labels = [t.get_text() for t in ax.get_xticklabels()]
+    assert labels == ["NC\n(n=3)", "a\n(n=2)"]
+    plt.close(fig)
