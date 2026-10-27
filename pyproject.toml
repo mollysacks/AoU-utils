@@ -14,7 +14,7 @@ dependencies = []
 
 [project.optional-dependencies]
 bq = ["pandas", "google-cloud-bigquery", "db-dtypes"]
-dev = ["pytest"]
+dev = ["pytest", "numpy", "pandas", "scipy"]
 
 [tool.setuptools.packages.find]
 where = ["src"]
