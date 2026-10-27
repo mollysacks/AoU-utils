@@ -66,3 +66,25 @@ def test_coverage_and_complete_cases():
     assert table.loc[1.0, "n_measurements"] == 1  # only concept 10 has full DEL coverage
     assert table.loc[1.0, "complete_DEL"] == 2
     assert table.loc[0.5, "complete_DEL"] == 1  # needs both 10 and 11
+
+
+def test_boxcox_by_group_fits_separate_lambdas(rng):
+    n = 4000
+    sex = pd.Series(np.where(np.arange(n) < n // 2, "female", "male"))
+    sex.iloc[0] = np.nan
+    x = np.where(sex == "female", np.exp(rng.normal(size=n)), rng.normal(10, 1, size=n) ** 2)
+    wide = pd.DataFrame({"a": x})
+    transformed, params = measurements.boxcox(wide, groups=sex)
+    assert set(params.columns) == {"lambda_female", "shift_female", "lambda_male", "shift_male"}
+    assert abs(params.loc["a", "lambda_female"]) < 0.1  # lognormal -> log
+    assert params.loc["a", "lambda_male"] > 0.3  # squared normal -> closer to sqrt
+    assert np.isnan(transformed.loc[0, "a"])  # no group -> not transformed
+    assert transformed["a"].notna().sum() == n - 1
+
+
+def test_boxcox_by_group_skips_degenerate_group():
+    wide = pd.DataFrame({"a": [1.0, 2.0, 3.5, 4.0, 1.0, 1.0]})
+    groups = pd.Series(["f", "f", "f", "f", "m", "m"])
+    transformed, params = measurements.boxcox(wide, groups=groups)
+    assert transformed["a"].iloc[:4].notna().all() and transformed["a"].iloc[4:].isna().all()
+    assert "lambda_m" not in params.columns

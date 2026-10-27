@@ -95,25 +95,51 @@ def to_wide(medians: pd.DataFrame, column: str = "value") -> pd.DataFrame:
     return medians.pivot(index="person_id", columns="concept_id", values=column).astype("float32")
 
 
-def boxcox(wide: pd.DataFrame):
+def _boxcox_series(observed: pd.Series):
+    """Box-Cox one column's observed values -> (transformed, lambda, shift), or None if < 3 distinct values."""
+    from scipy import stats
+
+    if observed.nunique() < 3:
+        return None
+    shift = 1.0 - observed.min() if observed.min() <= 0 else 0.0
+    transformed, lam = stats.boxcox(observed + shift)
+    return pd.Series(transformed, index=observed.index), lam, shift
+
+
+def boxcox(wide: pd.DataFrame, groups: pd.Series = None):
     """Box-Cox transform each column, with lambda estimated by maximum likelihood.
 
-    Box-Cox needs positive values, so columns with a minimum <= 0 are shifted by (1 - min) first.
-    Columns with fewer than 3 distinct values are left out. Returns (transformed, params), where
-    params is indexed by column with `lambda` and `shift`.
+    Box-Cox needs positive values, so values are shifted by (1 - min) first when the minimum is <= 0.
+    With `groups` (indexed like `wide`, e.g. sex), lambda and shift are fit separately within each
+    group; people with no group get NaN. A column (or a group within it) with fewer than 3 distinct
+    values isn't transformed, and columns with nothing transformed are left out.
+
+    Returns (transformed, params). params is indexed by column, with `lambda` and `shift`, or
+    `lambda_<group>` and `shift_<group>` for each group.
     """
-    from scipy import stats
+    if groups is None:
+        groups = pd.Series("all", index=wide.index)
+        suffix = lambda g: ""
+    else:
+        groups = groups.reindex(wide.index)
+        suffix = lambda g: f"_{g}"
+    levels = sorted(groups.dropna().unique())
 
     out, params = {}, {}
     for col in wide.columns:
-        x = wide[col]
-        observed = x.dropna().astype("float64")
-        if observed.nunique() < 3:
-            continue
-        shift = 1.0 - observed.min() if observed.min() <= 0 else 0.0
-        transformed, lam = stats.boxcox(observed + shift)
-        out[col] = pd.Series(transformed, index=observed.index).reindex(x.index)
-        params[col] = {"lambda": lam, "shift": shift}
+        pieces, col_params = [], {}
+        for g in levels:
+            observed = wide.loc[groups == g, col].dropna().astype("float64")
+            result = _boxcox_series(observed)
+            if result is None:
+                continue
+            transformed, lam, shift = result
+            pieces.append(transformed)
+            col_params[f"lambda{suffix(g)}"] = lam
+            col_params[f"shift{suffix(g)}"] = shift
+        if pieces:
+            out[col] = pd.concat(pieces).reindex(wide.index)
+            params[col] = col_params
     transformed = pd.DataFrame(out, index=wide.index, dtype="float32")
     transformed.columns.name = wide.columns.name
     return transformed, pd.DataFrame.from_dict(params, orient="index")
