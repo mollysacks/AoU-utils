@@ -88,3 +88,26 @@ def test_boxcox_by_group_skips_degenerate_group():
     transformed, params = measurements.boxcox(wide, groups=groups)
     assert transformed["a"].iloc[:4].notna().all() and transformed["a"].iloc[4:].isna().all()
     assert "lambda_m" not in params.columns
+
+
+def test_bh_matches_hand_computation():
+    q = measurements._bh(np.array([0.01, 0.04, 0.03, 0.5]))
+    np.testing.assert_allclose(q, [0.04, 0.05333333, 0.05333333, 0.5])
+
+
+def test_group_effects(rng):
+    n_ref, n_g = 5000, 200
+    groups = pd.Series(["NC"] * n_ref + ["DEL"] * n_g + ["DUP"] * n_g)
+    shifted = np.r_[rng.normal(size=n_ref), rng.normal(1.0, 1, n_g), rng.normal(size=n_g)]
+    null = rng.normal(size=n_ref + 2 * n_g)
+    values = pd.DataFrame({"shifted": shifted, "null": null})
+    values.loc[0, "null"] = np.nan  # each measurement uses its own non-missing people
+
+    effects = measurements.group_effects(values, groups).set_index(["concept_id", "group"])
+    assert len(effects) == 4
+    del_shift = effects.loc[("shifted", "DEL")]
+    assert del_shift["effect"] == pytest.approx(1.0, abs=0.15)
+    assert del_shift["ci_low"] < del_shift["effect"] < del_shift["ci_high"]
+    assert del_shift["p"] < 1e-20 and del_shift["q"] < 1e-20
+    assert effects.loc[("shifted", "DUP"), "p"] > 1e-3
+    assert effects.loc[("null", "DEL"), "n_reference"] == n_ref - 1

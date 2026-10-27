@@ -215,3 +215,50 @@ def complete_cases(present: pd.DataFrame, score: pd.Series, groups: pd.Series, c
         n = groups[complete].value_counts().reindex(groups.unique(), fill_value=0)
         rows.append({"cutoff": cutoff, "n_measurements": len(keep), **n.add_prefix("complete_")})
     return pd.DataFrame(rows).set_index("cutoff")
+
+
+def _bh(p: np.ndarray) -> np.ndarray:
+    """Benjamini-Hochberg q-values."""
+    p = np.asarray(p, dtype="float64")
+    n = len(p)
+    order = np.argsort(p)
+    ranked = p[order] * n / np.arange(1, n + 1)
+    q = np.minimum.accumulate(ranked[::-1])[::-1]
+    out = np.empty(n)
+    out[order] = np.minimum(q, 1)
+    return out
+
+
+def group_effects(values: pd.DataFrame, groups: pd.Series, reference: str = "NC") -> pd.DataFrame:
+    """Per-measurement mean difference of each group vs `reference`, with Welch t-tests.
+
+    Each measurement uses everyone who has a value for it, so (unlike the LDA) it doesn't depend on
+    complete cases or on which other measurements are included. With z-scored values, effects are in
+    SD units. Returns one row per (concept_id, group) with n, n_reference, effect, se, ci_low,
+    ci_high (95%), p, and q (Benjamini-Hochberg across all rows).
+    """
+    from scipy import stats
+
+    groups = groups.reindex(values.index)
+    ref = values[groups == reference]
+    ref_n, ref_mean, ref_var = ref.count(), ref.mean(), ref.var(ddof=1)
+
+    parts = []
+    for g in sorted(set(groups.dropna()) - {reference}):
+        sub = values[groups == g]
+        n, mean, var = sub.count(), sub.mean(), sub.var(ddof=1)
+        va, vb = var / n, ref_var / ref_n
+        se = np.sqrt(va + vb)
+        dof = (va + vb) ** 2 / (va ** 2 / (n - 1) + vb ** 2 / (ref_n - 1))
+        effect = mean - ref_mean
+        tcrit = stats.t.ppf(0.975, dof)
+        parts.append(pd.DataFrame({
+            "concept_id": values.columns, "group": g, "n": n.to_numpy(), "n_reference": ref_n.to_numpy(),
+            "effect": effect.to_numpy(), "se": se.to_numpy(),
+            "ci_low": (effect - tcrit * se).to_numpy(), "ci_high": (effect + tcrit * se).to_numpy(),
+            "p": 2 * stats.t.sf(np.abs(effect / se), dof),
+        }))
+    out = pd.concat(parts, ignore_index=True)
+    out = out[(out["n"] >= 2) & (out["n_reference"] >= 2) & out["p"].notna()].reset_index(drop=True)
+    out["q"] = _bh(out["p"].to_numpy())
+    return out

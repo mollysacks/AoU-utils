@@ -30,3 +30,27 @@ def dodged_hist(ax, values: pd.Series, groups: pd.Series, order, bins: int = 30,
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
     return edges
+
+
+def forest(ax, effects: pd.DataFrame, concepts, order, labels=None):
+    """Effect and 95% CI per concept (rows) for each group (colored points, offset within a row).
+
+    `effects` has columns concept_id, group, effect, ci_low, ci_high (as from
+    measurements.group_effects); `concepts` gives the row order and `order` the groups.
+    """
+    concepts = list(concepts)
+    offsets = np.linspace(-0.3, 0.3, len(order)) if len(order) > 1 else [0.0]
+    rows = np.arange(len(concepts))
+    for g, color, offset in zip(order, SERIES_COLORS, offsets):
+        e = effects[effects["group"] == g].set_index("concept_id").reindex(concepts)
+        xerr = np.vstack([e["effect"] - e["ci_low"], e["ci_high"] - e["effect"]])
+        ax.errorbar(e["effect"], rows + offset, xerr=xerr, fmt="o", color=color, markersize=4,
+                    elinewidth=1, capsize=0, label=g)
+    ax.axvline(0, color="#999999", linewidth=1, zorder=0)
+    ax.set_yticks(rows)
+    ax.set_yticklabels(labels if labels is not None else concepts)
+    ax.invert_yaxis()
+    ax.set_xlabel("difference from reference (SD)")
+    ax.legend(frameon=False)
+    for side in ("top", "right"):
+        ax.spines[side].set_visible(False)
