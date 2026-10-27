@@ -16,7 +16,7 @@ The import name is `aou_utils`.
 In a notebook cell:
 
 ```python
-%pip install --user --no-deps --force-reinstall "git+https://github.com/<github-user>/AoU-utils.git@main"
+%pip install --user --no-deps --force-reinstall "git+https://github.com/mollysacks/AoU-utils.git@main"
 ```
 
 For a project branch, swap `@main` for `@dev/<project-name>`. To freeze the exact code an analysis used, pin a tag or commit instead (`@v0.1.0` or `@<commit-sha>`).
@@ -39,7 +39,7 @@ df = bq.query("SELECT COUNT(*) AS n FROM `{cdr}.person`")
 pip builds a wheel when installing from git, so the command above is usually all you need. CI also builds one on every push (downloadable from the Actions run). Pushing a `v*` tag attaches the wheel to a GitHub release, which you can install with:
 
 ```python
-%pip install --user --no-deps "https://github.com/<github-user>/AoU-utils/releases/download/v0.1.0/aou_utils-0.1.0-py3-none-any.whl"
+%pip install --user --no-deps "https://github.com/mollysacks/AoU-utils/releases/download/v0.1.0/aou_utils-0.1.0-py3-none-any.whl"
 ```
 
 ## Developing on Expanse
