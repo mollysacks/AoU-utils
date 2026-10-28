@@ -62,3 +62,20 @@ def test_group_boxes_skips_empty_groups():
     labels = [t.get_text() for t in ax.get_xticklabels()]
     assert labels == ["NC\n(n=3)", "a\n(n=2)"]
     plt.close(fig)
+
+
+def test_lda_biplot_bars_and_means():
+    from aou_utils.plots import lda_biplot
+
+    rng = np.random.default_rng(0)
+    scores = pd.DataFrame(rng.normal(size=(60, 2)), columns=["LD1", "LD2"])
+    scores.iloc[0] = np.nan
+    groups = pd.Series(["NC"] * 40 + ["a"] * 10 + ["b"] * 10)
+    loadings = pd.DataFrame({"LD1": [0.9, -0.5, 0.1, 0.0], "LD2": [0.0, 0.2, -0.8, 0.6]}, index=[11, 12, 13, 14])
+    fig = plt.figure()
+    axes = lda_biplot(fig, scores, loadings, groups, ["a", "b", "NC"],
+                      labels={11: "w", 12: "x", 13: "y", 14: "z"}, top=3)
+    assert [t.get_text() for t in axes["LD1"].get_yticklabels()] == ["w", "y", "x"]  # largest |loading|, sorted by value
+    assert [t.get_text() for t in axes["LD2"].get_xticklabels()] == ["z", "x", "y"]
+    assert {t.get_text() for t in axes["scatter"].texts} == {"a", "b", "NC"}
+    plt.close(fig)

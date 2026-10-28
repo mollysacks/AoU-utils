@@ -128,3 +128,69 @@ def group_boxes(ax, values: pd.Series, groups: pd.Series, order, reference: str 
     ax.set_xticklabels([f"{g}\n(n={len(v)})" for g, v in data.items()], fontsize=8)
     for side in ("top", "right"):
         ax.spines[side].set_visible(False)
+
+
+def lda_biplot(fig, scores: pd.DataFrame, loadings: pd.DataFrame, groups: pd.Series, order, labels=None,
+               axes=("LD1", "LD2"), top: int = 12, max_points: int = 3000, seed: int = 0):
+    """Scatter of two discriminant axes colored by group, with each axis's top loadings beside it.
+
+    The x axis of the scatter is `axes[0]` and y is `axes[1]`. Below the scatter, horizontal bars
+    give the `top` loadings on x (bars point right = trait raises the x score); to its left,
+    vertical bars give the loadings on y (bars point up = trait raises the y score). So each bar
+    points the way its trait moves people in the scatter. Group means (from everyone) are large
+    labeled markers; groups larger than `max_points` are subsampled in the scatter. `labels` maps
+    the loadings index to display names. Returns a dict of the three axes.
+    """
+    rng = np.random.default_rng(seed)
+    x, y = axes
+    scores = scores[[x, y]].dropna()
+    groups = groups.reindex(scores.index)
+    labels = pd.Series(labels if labels is not None else loadings.index, index=loadings.index).astype(str).str[:40]
+
+    ax = fig.add_axes([0.34, 0.36, 0.60, 0.60])
+    ax_y = fig.add_axes([0.06, 0.36, 0.22, 0.60])
+    ax_x = fig.add_axes([0.34, 0.05, 0.60, 0.24])
+
+    colors = dict(zip(order, SERIES_COLORS))
+    sizes = groups.value_counts().reindex(order).fillna(0)
+    for g in sizes.sort_values(ascending=False).index:  # largest first so small groups draw on top
+        s = scores[groups == g]
+        if len(s) > max_points:
+            s = s.iloc[rng.choice(len(s), max_points, replace=False)]
+        ax.scatter(s[x], s[y], s=8, alpha=0.4, color=colors[g], linewidths=0, label=g)
+    means = scores.groupby(groups).mean().reindex(order).dropna()
+    for g, (mx, my) in means.iterrows():
+        ax.scatter(mx, my, s=140, color=colors[g], edgecolors="white", linewidths=2, zorder=4)
+        ax.annotate(g, (mx, my), xytext=(8, 8), textcoords="offset points", fontsize=9, color="#0b0b0b", zorder=5)
+    ax.axhline(0, color="#c3c2b7", linewidth=1, zorder=0)
+    ax.axvline(0, color="#c3c2b7", linewidth=1, zorder=0)
+    ax.set_xlabel(f"{x} score")
+    ax.set_ylabel(f"{y} score")
+    ax.legend(frameon=False, markerscale=2)
+
+    top_x = loadings[x].reindex(loadings[x].abs().sort_values(ascending=False).index[:top]).sort_values(ascending=False)
+    top_y = loadings[y].reindex(loadings[y].abs().sort_values(ascending=False).index[:top]).sort_values(ascending=False)
+    lim = 1.1 * max(top_x.abs().max(), top_y.abs().max())
+
+    ax_x.barh(range(len(top_x)), top_x, color="#52514e", height=0.7)
+    ax_x.set_yticks(range(len(top_x)))
+    ax_x.set_yticklabels(labels.loc[top_x.index], fontsize=8)
+    ax_x.yaxis.tick_right()
+    ax_x.tick_params(axis="y", length=0)
+    ax_x.invert_yaxis()
+    ax_x.set_xlim(-lim, lim)
+    ax_x.axvline(0, color="#999999", linewidth=1)
+    ax_x.set_xlabel(f"loading on {x}")
+
+    ax_y.bar(range(len(top_y)), top_y, color="#52514e", width=0.7)
+    ax_y.set_xticks(range(len(top_y)))
+    ax_y.set_xticklabels(labels.loc[top_y.index], fontsize=8, rotation=90)
+    ax_y.tick_params(axis="x", length=0)
+    ax_y.set_ylim(-lim, lim)
+    ax_y.axhline(0, color="#999999", linewidth=1)
+    ax_y.set_ylabel(f"loading on {y}")
+
+    for a, hidden in ((ax, ("top", "right")), (ax_x, ("top", "left", "right")), (ax_y, ("top", "right", "bottom"))):
+        for side in hidden:
+            a.spines[side].set_visible(False)
+    return {"scatter": ax, x: ax_x, y: ax_y}
