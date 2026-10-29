@@ -38,6 +38,14 @@ def match_loci(names, columns) -> dict:
     return {n: by_key[normalize(n)] for n in names}
 
 
+def _locus_allele(entry: str):
+    """Split a locus entry like '22q11.21_A-D:DEL' into ('22q11.21_A-D', 'DEL'); no suffix means both."""
+    name, _, allele = str(entry).partition(":")
+    if allele not in ("", "DEL", "DUP"):
+        raise ValueError(f"Allele must be DEL or DUP, not {allele!r} (in {entry!r})")
+    return name, allele or None
+
+
 def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True, exclude=()) -> pd.Series:
     """Group label per person from copy-number calls (2 = normal).
 
@@ -47,20 +55,28 @@ def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True, exclud
     are 'NC'. People carrying CNVs with more than one label are 'multiple'; people with no CNV but
     a missing call at some classified locus get NaN.
 
-    Carriers of any locus in `exclude` are labeled 'excluded' whatever else they carry, so they
-    end up in neither a carrier group nor NC (e.g. common CNVs that would dominate a class).
+    A locus can be limited to one allele with a suffix, e.g. '22q11.21_A-D:DEL'. Carriers of a
+    classified locus's other allele are labeled 'excluded'. So are carriers of any locus in
+    `exclude`, whatever else they carry, so they end up in neither a carrier group nor NC (e.g.
+    common CNVs that would dominate a class).
     """
     carrier = {}
-    all_columns = []
+    all_columns, del_columns, dup_columns = [], set(), set()
     for name, loci in classes.items():
-        columns = list(match_loci(loci, calls.columns).values())
-        all_columns += columns
-        cn = calls[columns]
+        parsed = [_locus_allele(entry) for entry in loci]
+        columns = match_loci([locus for locus, _ in parsed], calls.columns)
+        dels = [columns[locus] for locus, allele in parsed if allele != "DUP"]
+        dups = [columns[locus] for locus, allele in parsed if allele != "DEL"]
+        all_columns += list(columns.values())
+        del_columns.update(dels)
+        dup_columns.update(dups)
+        is_del = (calls[dels] < 2).fillna(False).any(axis=1)
+        is_dup = (calls[dups] > 2).fillna(False).any(axis=1)
         if split_copy:
-            carrier[f"{name}_DEL"] = (cn < 2).fillna(False).any(axis=1)
-            carrier[f"{name}_DUP"] = (cn > 2).fillna(False).any(axis=1)
+            carrier[f"{name}_DEL"] = is_del
+            carrier[f"{name}_DUP"] = is_dup
         else:
-            carrier[name] = (cn != 2).fillna(False).any(axis=1)
+            carrier[name] = is_del | is_dup
     carrier = pd.DataFrame(carrier)
     n_labels = carrier.sum(axis=1)
 
@@ -69,6 +85,10 @@ def classify(calls: pd.DataFrame, classes: dict, split_copy: bool = True, exclud
     groups[n_labels > 1] = "multiple"
     no_cnv = (n_labels == 0) & calls[all_columns].notna().all(axis=1)
     groups[no_cnv] = "NC"
+    all_columns = list(dict.fromkeys(all_columns))
+    other_allele = (calls[[c for c in all_columns if c not in del_columns]] < 2).fillna(False).any(axis=1) | \
+                   (calls[[c for c in all_columns if c not in dup_columns]] > 2).fillna(False).any(axis=1)
+    groups[other_allele] = "excluded"
     if exclude:
         cn = calls[list(match_loci(exclude, calls.columns).values())]
         groups[((cn != 2) & cn.notna()).any(axis=1)] = "excluded"

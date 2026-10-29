@@ -48,3 +48,13 @@ def test_classify_exclude_loci(calls):
     groups = cnv.classify(calls, classes, exclude=["3q29"])
     assert groups[6] == "excluded"
     assert groups[1] == "NC" and groups[2] == "mirror_DEL"
+
+
+def test_classify_allele_specific_loci(calls):
+    # 17q12 counts only as a DUP: person 4's 17q12 DEL is the other allele, so they're excluded
+    groups = cnv.classify(calls, {"pos": ["1q21.1", "16p11.2_BP4_BP5:DEL"], "neg": ["17q12:DUP"]})
+    assert groups[2] == "pos_DEL" and groups[3] == "neg_DUP"
+    assert groups[4] == "excluded"
+    assert groups[1] == "NC" and groups[6] == "NC" and pd.isna(groups[5])
+    with pytest.raises(ValueError, match="DEL or DUP"):
+        cnv.classify(calls, {"pos": ["1q21.1:del"]})
