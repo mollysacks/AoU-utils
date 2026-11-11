@@ -9,6 +9,7 @@ The import name is `aou_utils`.
 - Code is written and edited **only on Expanse**, pushed to GitHub, then installed into a Workbench environment with pip. The repo is never edited from inside the Workbench.
 - `main` holds stable, shared code.
 - Each project gets its own branch, `dev/<project-name>`. Useful pieces get merged back into `main`.
+- Notebooks aren't kept in the repo. Analysis code lives in the package; notebook cells that call it are pasted into the Workbench by hand.
 - This repo is **code only**. No participant-level data, outputs, or counts derived from the Workbench go in here (see `.gitignore`).
 
 ## Installing on the Workbench
@@ -33,16 +34,6 @@ df = bq.query("SELECT COUNT(*) AS n FROM `{cdr}.person`")
 ```
 
 `--no-deps` keeps pip from touching the Workbench's preinstalled pandas/BigQuery. `--force-reinstall` makes sure you get the latest commit, since the version number doesn't change between pushes to a branch.
-
-### Dev notebook
-
-[`notebooks/dev_template.ipynb`](notebooks/dev_template.ipynb) wraps the install, the import and a check of which commit you're running. To get a copy, run this in a Workbench terminal:
-
-```bash
-curl -O https://raw.githubusercontent.com/mollysacks/AoU-utils/main/notebooks/dev_template.ipynb
-```
-
-Set `BRANCH`. After each push, use **Kernel → Restart Kernel and Run All Cells**. No separate restart is needed because the setup cell makes the fresh install importable.
 
 ### Installing from a wheel
 
