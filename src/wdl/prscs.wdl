@@ -40,9 +40,8 @@ workflow prscs {
     String out_prefix = "prscs"
     # gs:// folder the final outputs are copied to, e.g. gs://<bucket>/working/PGS
     String output_dir
-    # Needs an image with NO ENTRYPOINT: on Workbench (Cromwell on GCP Batch) the task command never
-    # starts in images that set one (e.g. quay.io/biocontainers/prscs). This one is Ubuntu + numpy,
-    # scipy, h5py (2023) + a clone of github.com/getian107/PRScs, pinned by digest.
+    # Docker Hub image (Workbench pulls Docker Hub through mirror.gcr.io; quay.io images failed to
+    # start). Ubuntu + numpy, scipy, h5py (2023) + a clone of github.com/getian107/PRScs, pinned.
     String prscs_docker = "mmurali1234/prscs@sha256:c6123897d66c1cbfae21126daf1892bb6707a994f231349bbe9dc60f64956e0a"
     String plink2_docker = "pgscatalog/plink2:2.00a5.10"
     String gcloud_docker = "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"
@@ -211,9 +210,10 @@ task run_prscs {
   Int disk_gb = ceil(size(ld_block, "GB") + size(snpinfo, "GB") + size(sumstats, "GB")) + 10
 
   command <<<
-    # On Workbench, Cromwell copies a task's stdout/stderr/outputs back to the bucket only when the
-    # task succeeds. So the real work runs in a subshell whose output and exit code go to files,
-    # and this task always exits 0; make_score_file fails the workflow if any chromosome failed.
+    # The work runs in a subshell whose output goes to stdout (Cromwell uploads stdout to the shard
+    # folder every ~60 s, so progress is visible live) and to prscs_chrN.log, with its exit code in
+    # prscs_chrN.rc. The task always exits 0 so its outputs are kept even when PRS-CS fails;
+    # make_score_file fails the workflow if any chromosome failed.
     touch weights_chr~{chrom}.txt
     (
       set -euo pipefail
@@ -243,7 +243,7 @@ task run_prscs {
       echo "PRScs: $prscs"
 
       echo "== PRS-CS"
-      python3 "$prscs" \
+      python3 -u "$prscs" \
         --ref_dir="ref/~{ld_name}" \
         --bim_prefix=target \
         --sst_file="~{sumstats}" \
@@ -256,11 +256,10 @@ task run_prscs {
 
       cat out/prscs_pst_eff_*_chr~{chrom}.txt > weights_chr~{chrom}.txt
       echo "weights written: $(wc -l < weights_chr~{chrom}.txt)"
-    ) > prscs_chr~{chrom}.log 2>&1
-    rc=$?
+    ) 2>&1 | tee prscs_chr~{chrom}.log
+    rc=${PIPESTATUS[0]}
     echo "$rc" > prscs_chr~{chrom}.rc
-    echo "== exit code $rc" >> prscs_chr~{chrom}.log
-    cat prscs_chr~{chrom}.log
+    echo "== exit code $rc" | tee -a prscs_chr~{chrom}.log
     exit 0
   >>>
 
