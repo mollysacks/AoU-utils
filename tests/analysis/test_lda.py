@@ -4,7 +4,7 @@ import pytest
 
 pytest.importorskip("sklearn")
 
-from aou_utils import lda  # noqa: E402
+from aou_utils.analysis.lda import lda  # noqa: E402
 
 
 @pytest.fixture

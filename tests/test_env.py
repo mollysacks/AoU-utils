@@ -87,3 +87,7 @@ def test_missing_wb_raises(monkeypatch):
 def test_google_project_from_wb(fake_wb):
     assert env.google_project() == "wb-ws-project"
     assert env.os.environ["GOOGLE_PROJECT"] == "wb-ws-project"
+
+
+def test_bucket_resource_id(fake_wb):
+    assert env.workspace_bucket_id() == "rw-migration-ws"

@@ -1,6 +1,7 @@
 # AoU-utils: notes for agents
 
-- Python package for the All of Us Researcher Workbench. Source is in `src/aou_utils/`, tests are in `tests/`.
+- Python package for the All of Us Researcher Workbench. Source is in `src/aou_utils/`, tests are in `tests/` (mirroring the package layout). Core helpers sit at the top level. Project analyses go in `aou_utils/analysis/<project>/`, and data-type code in folders such as `aou_utils/array/pgs/`.
+- WDL workflows live in `src/wdl/` (outside the package). They run on Workbench 2.0 through `wb workflow create` / `wb workflow job run` (Cromwell on GCP Batch). Use WDL `version 1.0`. Docker Hub images need the AoU Artifact Registry proxy prefix on the Workbench (`$ARTIFACT_REGISTRY_DOCKER_REPO/<image>`), so docker images are always workflow inputs. Test WDL command blocks locally with `~/bin/plink2` on synthetic data. CI runs `miniwdl check`.
 - Edited only on Expanse and installed on the Workbench with pip from GitHub. The Workbench can't be reached from here, so code that needs BigQuery or GCS can't be run here. Keep `google.cloud` and similar imports inside functions so the package still imports, and test with mocks or synthetic data.
 - Workbench 2.0 (Verily) does NOT set `WORKSPACE_CDR` or `WORKSPACE_BUCKET`. `aou_utils.env` falls back to `wb resource list --format=json`. The billing project comes from `GOOGLE_PROJECT` or `GOOGLE_CLOUD_PROJECT`, else `wb workspace describe` (some kernels have neither variable). Always use the accessors in `aou_utils.env`.
 - Keep `dependencies` in `pyproject.toml` empty or minimal. Never pin packages the Workbench already provides.

@@ -71,10 +71,20 @@ def workspace_bucket(resource_id: str = None) -> str:
     if resource_id is not None:
         r = _only([b for b in buckets if b["id"] == resource_id], f"bucket with id {resource_id!r}")
         return f"gs://{r['bucketName']}"
-    user_buckets = [b for b in buckets if not b["bucketName"].startswith(_SYSTEM_BUCKET_PREFIXES)]
-    r = _only(user_buckets, "non-Dataproc GCS bucket (pass resource_id to choose)")
+    r = _default_bucket()
     os.environ["WORKSPACE_BUCKET"] = f"gs://{r['bucketName']}"
     return os.environ["WORKSPACE_BUCKET"]
+
+
+def _default_bucket() -> dict:
+    buckets = [r for r in resources() if r["resourceType"] == "GCS_BUCKET"]
+    user_buckets = [b for b in buckets if not b["bucketName"].startswith(_SYSTEM_BUCKET_PREFIXES)]
+    return _only(user_buckets, "non-Dataproc GCS bucket (pass resource_id to choose)")
+
+
+def workspace_bucket_id() -> str:
+    """Resource id (as in `wb resource list`) of the workspace bucket; `wb workflow` commands want this."""
+    return _default_bucket()["id"]
 
 
 def google_project() -> str:
