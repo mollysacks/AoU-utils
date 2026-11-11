@@ -84,12 +84,13 @@ def delete(workflow_id: str):
 
 
 def run(workflow_id: str, inputs: dict, folder: str, job_id: str = None, bucket_id: str = None,
-        description: str = None):
+        description: str = None, keep_intermediate: bool = True):
     """Start a job; returns what `wb workflow job run` prints (pass it to `describe` / `tasks`).
 
     `inputs` keys are '<workflow name>.<input>' as in the WDL, e.g. {'prscs.n_gwas': 500000}.
     Cromwell's files go to <bucket>/cromwell-execution/<folder>. The inputs are saved to
-    <that folder>/inputs/<job>-<timestamp>.json and passed by URI.
+    <that folder>/inputs/<job>-<timestamp>.json and passed by URI. keep_intermediate keeps
+    Cromwell's per-task files (logs, stderr) instead of the Workbench default of deleting them.
     """
     output_path = f"{EXECUTION_DIR}/{folder.strip('/')}"
     stamp = time.strftime("%Y%m%d-%H%M%S")
@@ -97,7 +98,7 @@ def run(workflow_id: str, inputs: dict, folder: str, job_id: str = None, bucket_
                             f"{workspace_bucket()}/{output_path}/inputs/{job_id or workflow_id}-{stamp}.json")
     args = ["workflow", "job", "run", f"--workflow={workflow_id}",
             f"--output-bucket-id={bucket_id or workspace_bucket_id()}", f"--output-path={output_path}",
-            f"--inputs-uri={inputs_uri}"]
+            f"--inputs-uri={inputs_uri}", f"--delete-intermediate-outputs={str(not keep_intermediate).lower()}"]
     if job_id:
         args.append(f"--job-id={job_id}")
     if description:

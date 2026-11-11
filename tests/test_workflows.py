@@ -44,6 +44,7 @@ def test_run_writes_inputs_then_submits(calls):
     assert json.loads(stdin) == {"prscs.n_gwas": 10}
     assert f"--inputs-uri={uri}" in wb
     assert "--output-path=cromwell-execution/PGS" in wb and "--job-id=prscs-height" in wb
+    assert "--delete-intermediate-outputs=false" in wb
 
 
 def test_describe_takes_run_result(calls):
