@@ -87,6 +87,7 @@ workflow prscs {
   call make_score_file {
     input:
       weights = run_prscs.weights,
+      prscs_rcs = run_prscs.rc,
       idmaps = match_target.idmap,
       match_summaries = match_target.summary,
       out_prefix = out_prefix,
@@ -210,41 +211,63 @@ task run_prscs {
   Int disk_gb = ceil(size(ld_block, "GB") + size(snpinfo, "GB") + size(sumstats, "GB")) + 10
 
   command <<<
-    set -euo pipefail
-    export MKL_NUM_THREADS=~{cpu} NUMEXPR_NUM_THREADS=~{cpu} OMP_NUM_THREADS=~{cpu} OPENBLAS_NUM_THREADS=~{cpu}
+    # On Workbench, Cromwell copies a task's stdout/stderr/outputs back to the bucket only when the
+    # task succeeds. So the real work runs in a subshell whose output and exit code go to files,
+    # and this task always exits 0; make_score_file fails the workflow if any chromosome failed.
+    touch weights_chr~{chrom}.txt
+    (
+      set -euo pipefail
+      export MKL_NUM_THREADS=~{cpu} NUMEXPR_NUM_THREADS=~{cpu} OMP_NUM_THREADS=~{cpu} OPENBLAS_NUM_THREADS=~{cpu}
 
-    blk=$(basename "~{ld_block}")
-    case "$blk" in
-      *_chr~{chrom}.hdf5) ;;
-      *) echo "LD block $blk isn't chromosome ~{chrom}: pass ld_blocks in order chr1..chr22" >&2; exit 1 ;;
-    esac
+      echo "== environment"
+      echo "python3: $(command -v python3)"; python3 --version
+      python3 -c 'import numpy, scipy, h5py; print("numpy", numpy.__version__, "scipy", scipy.__version__, "h5py", h5py.__version__)'
+      df -h . | tail -n 1; free -g | head -n 2
 
-    # PRS-CS wants one folder holding snpinfo_* and ldblk_*_chrN.hdf5
-    mkdir -p "ref/~{ld_name}" out
-    ln -s "~{snpinfo}" "ref/~{ld_name}/$(basename ~{snpinfo})"
-    ln -s "~{ld_block}" "ref/~{ld_name}/$blk"
-    cp "~{bim}" target.bim
+      blk=$(basename "~{ld_block}")
+      case "$blk" in
+        *_chr~{chrom}.hdf5) ;;
+        *) echo "LD block $blk isn't chromosome ~{chrom}: pass ld_blocks in order chr1..chr22"; exit 1 ;;
+      esac
 
-    # Call through python3: some images have no `python` for the script's shebang
-    prscs=$(command -v PRScs.py || ls /local/PRScs/PRScs.py /PRScs/PRScs.py 2>/dev/null | head -n 1 || true)
-    [ -n "$prscs" ] || { echo "PRScs.py not found in the docker image" >&2; exit 1; }
-    python3 "$prscs" \
-      --ref_dir="ref/~{ld_name}" \
-      --bim_prefix=target \
-      --sst_file="~{sumstats}" \
-      --n_gwas=~{n_gwas} \
-      --out_dir=out/prscs \
-      --chrom=~{chrom} \
-      --n_iter=~{n_iter} --n_burnin=~{n_burnin} --thin=~{thin} \
-      --seed=~{seed} \
-      ~{"--phi=" + phi} 2>&1 | tee prscs_chr~{chrom}.log
+      # PRS-CS wants one folder holding snpinfo_* and ldblk_*_chrN.hdf5
+      mkdir -p "ref/~{ld_name}" out
+      ln -s "~{snpinfo}" "ref/~{ld_name}/$(basename ~{snpinfo})"
+      ln -s "~{ld_block}" "ref/~{ld_name}/$blk"
+      cp "~{bim}" target.bim
+      echo "target SNPs on chr~{chrom}: $(wc -l < target.bim)"
 
-    cat out/prscs_pst_eff_*_chr~{chrom}.txt > weights_chr~{chrom}.txt
+      # Call through python3: some images have no `python` for the script's shebang
+      prscs=$(command -v PRScs.py || ls /local/PRScs/PRScs.py /PRScs/PRScs.py 2>/dev/null | head -n 1 || true)
+      [ -n "$prscs" ] || { echo "PRScs.py not found in the docker image"; exit 1; }
+      echo "PRScs: $prscs"
+
+      echo "== PRS-CS"
+      python3 "$prscs" \
+        --ref_dir="ref/~{ld_name}" \
+        --bim_prefix=target \
+        --sst_file="~{sumstats}" \
+        --n_gwas=~{n_gwas} \
+        --out_dir=out/prscs \
+        --chrom=~{chrom} \
+        --n_iter=~{n_iter} --n_burnin=~{n_burnin} --thin=~{thin} \
+        --seed=~{seed} \
+        ~{"--phi=" + phi}
+
+      cat out/prscs_pst_eff_*_chr~{chrom}.txt > weights_chr~{chrom}.txt
+      echo "weights written: $(wc -l < weights_chr~{chrom}.txt)"
+    ) > prscs_chr~{chrom}.log 2>&1
+    rc=$?
+    echo "$rc" > prscs_chr~{chrom}.rc
+    echo "== exit code $rc" >> prscs_chr~{chrom}.log
+    cat prscs_chr~{chrom}.log
+    exit 0
   >>>
 
   output {
     File weights = "weights_chr~{chrom}.txt"
     File log = "prscs_chr~{chrom}.log"
+    File rc = "prscs_chr~{chrom}.rc"
   }
 
   runtime {
@@ -259,6 +282,7 @@ task run_prscs {
 task make_score_file {
   input {
     Array[File] weights
+    Array[File] prscs_rcs
     Array[File] idmaps
     Array[File] match_summaries
     String out_prefix
@@ -268,6 +292,16 @@ task make_score_file {
 
   command <<<
     set -euo pipefail
+    # run_prscs always exits 0 so its logs get saved; stop here if any chromosome failed
+    bad=""
+    for f in ~{sep=" " prscs_rcs}; do
+      [ "$(cat "$f")" = "0" ] || bad="$bad $(basename "$f" .rc)"
+    done
+    if [ -n "$bad" ]; then
+      echo "PRS-CS failed for:$bad. See prscs_chr<N>.log in the call-run_prscs shard folders." >&2
+      exit 1
+    fi
+
     cat ~{sep=" " idmaps} > idmap.tsv
     cat ~{sep=" " weights} > weights.tsv
 
