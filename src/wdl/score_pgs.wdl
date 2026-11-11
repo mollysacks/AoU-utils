@@ -115,7 +115,8 @@ task score_chrom {
       *) echo "format must be pgen, bed, bgen or vcf (got ~{format})" >&2; exit 1 ;;
     esac
 
-    name=$(basename "$geno"); name=${name%%.*}
+    # e.g. acaf_threshold.chr1.maf01.geno02.eur.bed -> acaf_threshold.chr1.maf01.geno02.eur
+    name=$(basename "$geno"); name=${name%.gz}; name=${name%.bgz}; name=${name%.*}
     plink2 $src \
       ~{"--keep " + keep} \
       --score "~{score_file}" 1 2 3 header-read cols=+scoresums list-variants \
