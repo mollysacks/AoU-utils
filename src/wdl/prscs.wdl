@@ -40,7 +40,10 @@ workflow prscs {
     String out_prefix = "prscs"
     # gs:// folder the final outputs are copied to, e.g. gs://<bucket>/working/PGS
     String output_dir
-    String prscs_docker = "quay.io/biocontainers/prscs:1.1.0--hdfd78af_0"
+    # Needs an image with NO ENTRYPOINT: on Workbench (Cromwell on GCP Batch) the task command never
+    # starts in images that set one (e.g. quay.io/biocontainers/prscs). This one is Ubuntu + numpy,
+    # scipy, h5py (2023) + a clone of github.com/getian107/PRScs, pinned by digest.
+    String prscs_docker = "mmurali1234/prscs@sha256:c6123897d66c1cbfae21126daf1892bb6707a994f231349bbe9dc60f64956e0a"
     String plink2_docker = "pgscatalog/plink2:2.00a5.10"
     String gcloud_docker = "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"
     Int prscs_cpu = 4
@@ -222,7 +225,10 @@ task run_prscs {
     ln -s "~{ld_block}" "ref/~{ld_name}/$blk"
     cp "~{bim}" target.bim
 
-    PRScs.py \
+    # Call through python3: some images have no `python` for the script's shebang
+    prscs=$(command -v PRScs.py || ls /local/PRScs/PRScs.py /PRScs/PRScs.py 2>/dev/null | head -n 1 || true)
+    [ -n "$prscs" ] || { echo "PRScs.py not found in the docker image" >&2; exit 1; }
+    python3 "$prscs" \
       --ref_dir="ref/~{ld_name}" \
       --bim_prefix=target \
       --sst_file="~{sumstats}" \
