@@ -61,10 +61,26 @@ def upload_wdl(name: str, ref: str = "main", folder: str = "wdl") -> str:
     return path
 
 
-def create(workflow_id: str, wdl_path: str, bucket_id: str = None):
-    """Register a WDL in the workspace bucket as workflow `workflow_id`."""
-    return _wb("workflow", "create", f"--workflow={workflow_id}", "--workflow-type=WDL",
-               f"--bucket-id={bucket_id or workspace_bucket_id()}", f"--path={_bucket_path(wdl_path)}")
+def create(workflow_id: str, wdl_path: str, bucket_id: str = None, replace: bool = True):
+    """Register a WDL in the workspace bucket as workflow `workflow_id`.
+
+    There's no `wb workflow update`, so with replace=True an existing workflow of the same id is
+    deleted and registered again (picking up the new WDL).
+    """
+    args = ["workflow", "create", f"--workflow={workflow_id}", "--workflow-type=WDL",
+            f"--bucket-id={bucket_id or workspace_bucket_id()}", f"--path={_bucket_path(wdl_path)}"]
+    try:
+        return _wb(*args)
+    except RuntimeError as e:
+        if not (replace and "already exists" in str(e)):
+            raise
+    delete(workflow_id)
+    return _wb(*args)
+
+
+def delete(workflow_id: str):
+    """Remove a registered workflow (not its jobs' outputs)."""
+    _run(["wb", "workflow", "delete", "--quiet", f"--workflow={workflow_id}"])
 
 
 def run(workflow_id: str, inputs: dict, folder: str, job_id: str = None, bucket_id: str = None,

@@ -55,3 +55,28 @@ def test_describe_takes_run_result(calls):
 
 def test_find_outputs(calls):
     assert workflows.find_outputs("runs/a", ".score.tsv") == ["gs://ws-bucket/runs/a/call-x/p.score.tsv"]
+
+
+def test_create_replaces_existing(calls, monkeypatch):
+    seen = []
+
+    def run(cmd, input=None, **kwargs):
+        seen.append(cmd)
+        if cmd[:3] == ["wb", "workflow", "create"] and len(seen) == 1:
+            raise subprocess.CalledProcessError(1, cmd, stderr="A resource already exists in the workspace")
+        return subprocess.CompletedProcess(cmd, 0, stdout="{}")
+
+    monkeypatch.setattr(workflows.subprocess, "run", run)
+    workflows.create("prscs", "wdl/prscs.wdl")
+    assert [c[:3] for c in seen] == [["wb", "workflow", "create"], ["wb", "workflow", "delete"],
+                                     ["wb", "workflow", "create"]]
+    assert "--quiet" in seen[1] and "--workflow=prscs" in seen[1]
+
+
+def test_create_without_replace_raises(calls, monkeypatch):
+    def run(cmd, input=None, **kwargs):
+        raise subprocess.CalledProcessError(1, cmd, stderr="A resource already exists in the workspace")
+
+    monkeypatch.setattr(workflows.subprocess, "run", run)
+    with pytest.raises(RuntimeError, match="already exists"):
+        workflows.create("prscs", "wdl/prscs.wdl", replace=False)
