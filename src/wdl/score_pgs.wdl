@@ -1,6 +1,7 @@
 version 1.0
 
 # Score a polygenic score with plink2 --score, one task per chromosome, then sum across chromosomes.
+# The final scores and summary are copied to output_dir.
 #
 # score_file: ID A1 BETA with a header (e.g. the score_file output of prscs.wdl). IDs must match
 # the variant IDs in the genotype files.
@@ -22,8 +23,11 @@ workflow score_pgs {
     # Optional: only score these samples (plink2 --keep file: IID, or FID IID)
     File? keep
     String out_prefix = "pgs"
+    # gs:// folder the final outputs are copied to, e.g. gs://<bucket>/working/PGS
+    String output_dir
 
     String plink2_docker = "pgscatalog/plink2:2.00a5.10"
+    String gcloud_docker = "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"
     Int cpu = 4
     Int mem_gb = 16
     Int preemptible = 1
@@ -51,6 +55,14 @@ workflow score_pgs {
       used = score_chrom.used,
       out_prefix = out_prefix,
       docker = plink2_docker,
+      preemptible = preemptible
+  }
+
+  call copy_outputs {
+    input:
+      files = [combine.scores, combine.summary],
+      output_dir = output_dir,
+      docker = gcloud_docker,
       preemptible = preemptible
   }
 
@@ -159,20 +171,44 @@ task combine {
         for (i = 1; i <= n; i++) { id = order[i]; print id, ct[id], ds[id], pgs[id] }
       }' ~{sep=" " sscores} > "~{out_prefix}.sscore.tsv"
 
-    printf 'FILE\tVARIANTS_USED\n' > "~{out_prefix}.summary.tsv"
-    cat ~{sep=" " used} >> "~{out_prefix}.summary.tsv"
-    cat "~{out_prefix}.summary.tsv"
+    printf 'FILE\tVARIANTS_USED\n' > "~{out_prefix}.score_summary.tsv"
+    cat ~{sep=" " used} >> "~{out_prefix}.score_summary.tsv"
+    cat "~{out_prefix}.score_summary.tsv"
   >>>
 
   output {
     File scores = "~{out_prefix}.sscore.tsv"
-    File summary = "~{out_prefix}.summary.tsv"
+    File summary = "~{out_prefix}.score_summary.tsv"
   }
 
   runtime {
     docker: docker
     cpu: 1
     memory: "8 GB"
+    disks: "local-disk 20 SSD"
+    preemptible: preemptible
+  }
+}
+
+task copy_outputs {
+  input {
+    Array[File] files
+    String output_dir
+    String docker
+    Int preemptible
+  }
+
+  String dest = sub(output_dir, "/+$", "")
+
+  command <<<
+    set -euo pipefail
+    gcloud storage cp ~{sep=" " files} "~{dest}/"
+  >>>
+
+  runtime {
+    docker: docker
+    cpu: 1
+    memory: "2 GB"
     disks: "local-disk 20 SSD"
     preemptible: preemptible
   }

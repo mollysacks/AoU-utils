@@ -1,18 +1,23 @@
 """Run this repo's WDL workflows (src/wdl/) on Workbench 2.0 with the `wb workflow` CLI.
 
 Typical use: `upload_wdl` copies a WDL from GitHub into the workspace bucket, `create` registers
-it with the workspace, `run` writes the inputs JSON next to the outputs and starts a job, and
-`describe` / `find_outputs` check on it.
+it with the workspace, `run` starts a job, and `describe` / `tasks` check on it.
+Jobs run on the Workbench's own Cromwell server (no cromshell or Cromwell app needed). Cromwell's
+execution and status files go to <bucket>/cromwell-execution/<folder> (one folder per kind of
+analysis, e.g. 'PGS'; Cromwell makes a subfolder per job). The WDLs copy their final outputs to
+the `output_dir` they're given.
 """
 
 import json
 import subprocess
+import time
 import urllib.request
 
 from .env import workspace_bucket, workspace_bucket_id
 
 REPO = "mollysacks/AoU-utils"
 RAW_URL = "https://raw.githubusercontent.com/{repo}/{ref}/src/wdl/{name}"
+EXECUTION_DIR = "cromwell-execution"
 
 
 def _run(cmd, stdin: str = None) -> str:
@@ -62,14 +67,18 @@ def create(workflow_id: str, wdl_path: str, bucket_id: str = None):
                f"--bucket-id={bucket_id or workspace_bucket_id()}", f"--path={_bucket_path(wdl_path)}")
 
 
-def run(workflow_id: str, inputs: dict, output_path: str, job_id: str = None, bucket_id: str = None,
+def run(workflow_id: str, inputs: dict, folder: str, job_id: str = None, bucket_id: str = None,
         description: str = None):
-    """Start a job. Inputs are saved to <bucket>/<output_path>/inputs.json and passed by URI.
+    """Start a job; returns what `wb workflow job run` prints (pass it to `describe` / `tasks`).
 
     `inputs` keys are '<workflow name>.<input>' as in the WDL, e.g. {'prscs.n_gwas': 500000}.
+    Cromwell's files go to <bucket>/cromwell-execution/<folder>. The inputs are saved to
+    <that folder>/inputs/<job>-<timestamp>.json and passed by URI.
     """
-    output_path = _bucket_path(output_path)
-    inputs_uri = write_text(json.dumps(inputs, indent=2), f"{workspace_bucket()}/{output_path}/inputs.json")
+    output_path = f"{EXECUTION_DIR}/{folder.strip('/')}"
+    stamp = time.strftime("%Y%m%d-%H%M%S")
+    inputs_uri = write_text(json.dumps(inputs, indent=2),
+                            f"{workspace_bucket()}/{output_path}/inputs/{job_id or workflow_id}-{stamp}.json")
     args = ["workflow", "job", "run", f"--workflow={workflow_id}",
             f"--output-bucket-id={bucket_id or workspace_bucket_id()}", f"--output-path={output_path}",
             f"--inputs-uri={inputs_uri}"]
@@ -80,9 +89,27 @@ def run(workflow_id: str, inputs: dict, output_path: str, job_id: str = None, bu
     return _wb(*args)
 
 
-def describe(job_id: str):
-    """Status and details of a job (`wb workflow job describe`)."""
-    return _wb("workflow", "job", "describe", f"--job-id={job_id}")
+def _job_uuid(job) -> str:
+    """The job's UUID, from the dict `run` returned or a UUID string."""
+    if isinstance(job, str):
+        return job
+    for key in ("id", "jobId", "uuid", "jobUuid"):
+        if job.get(key):
+            return job[key]
+    raise ValueError(f"No job id found in {list(job)}; pass the UUID shown by `wb workflow job list`")
+
+
+def describe(job):
+    """Status and details of a job (`wb workflow job describe`). `job`: run()'s result or the UUID."""
+    return _wb("workflow", "job", "describe", f"--job-id={_job_uuid(job)}")
+
+
+def tasks(job):
+    """The job's tasks with their status (`wb workflow job task list`), as a DataFrame."""
+    import pandas as pd
+
+    out = _wb("workflow", "job", "task", "list", f"--job-id={_job_uuid(job)}")
+    return pd.json_normalize(out) if isinstance(out, list) else out
 
 
 def list_jobs():

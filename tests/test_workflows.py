@@ -37,12 +37,20 @@ def test_create_rejects_other_bucket(calls):
 
 
 def test_run_writes_inputs_then_submits(calls):
-    workflows.run("prscs", {"prscs.n_gwas": 10}, "runs/a", job_id="height")
+    workflows.run("prscs", {"prscs.n_gwas": 10}, "PGS", job_id="prscs-height")
     (cp, stdin), (wb, _) = calls
-    assert cp == ["gcloud", "storage", "cp", "-", "gs://ws-bucket/runs/a/inputs.json"]
+    uri = cp[-1]
+    assert uri.startswith("gs://ws-bucket/cromwell-execution/PGS/inputs/prscs-height-") and uri.endswith(".json")
     assert json.loads(stdin) == {"prscs.n_gwas": 10}
-    assert "--inputs-uri=gs://ws-bucket/runs/a/inputs.json" in wb
-    assert "--output-path=runs/a" in wb and "--job-id=height" in wb
+    assert f"--inputs-uri={uri}" in wb
+    assert "--output-path=cromwell-execution/PGS" in wb and "--job-id=prscs-height" in wb
+
+
+def test_describe_takes_run_result(calls):
+    workflows.describe({"id": "1234-uuid", "status": "RUNNING"})
+    assert "--job-id=1234-uuid" in calls[0][0]
+    with pytest.raises(ValueError):
+        workflows.describe({"status": "RUNNING"})
 
 
 def test_find_outputs(calls):

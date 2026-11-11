@@ -10,7 +10,7 @@ version 1.0
 #      rsID -> target variant ID map.
 #   2. prscs: run PRS-CS on that chromosome.
 # Then make_score_file joins the weights to the target IDs, giving a plink2 --score file
-# (ID, A1, BETA) for score_pgs.wdl.
+# (ID, A1, BETA) for score_pgs.wdl. copy_outputs copies the final files to output_dir.
 #
 # Inputs ordered by chromosome: ld_blocks and target_variants must both be chr1..chr22 in order.
 
@@ -38,8 +38,11 @@ workflow prscs {
     Int seed = 1
 
     String out_prefix = "prscs"
+    # gs:// folder the final outputs are copied to, e.g. gs://<bucket>/working/PGS
+    String output_dir
     String prscs_docker = "quay.io/biocontainers/prscs:1.1.0--hdfd78af_0"
     String plink2_docker = "pgscatalog/plink2:2.00a5.10"
+    String gcloud_docker = "gcr.io/google.com/cloudsdktool/google-cloud-cli:slim"
     Int prscs_cpu = 4
     Int prscs_mem_gb = 16
     Int preemptible = 1
@@ -85,6 +88,14 @@ workflow prscs {
       match_summaries = match_target.summary,
       out_prefix = out_prefix,
       docker = plink2_docker,
+      preemptible = preemptible
+  }
+
+  call copy_outputs {
+    input:
+      files = [make_score_file.weights_with_ids, make_score_file.score_file, make_score_file.summary],
+      output_dir = output_dir,
+      docker = gcloud_docker,
       preemptible = preemptible
   }
 
@@ -264,23 +275,47 @@ task make_score_file {
     touch weights_per_chrom.tsv
 
     # summary: chromosome, HapMap3 SNPs, matched in target, skipped (bad/duplicate ID), weights
-    printf 'CHR\tHM3_SNPS\tMATCHED\tSKIPPED\tWEIGHTS\n' > "~{out_prefix}.summary.tsv"
+    printf 'CHR\tHM3_SNPS\tMATCHED\tSKIPPED\tWEIGHTS\n' > "~{out_prefix}.prscs_summary.tsv"
     cat ~{sep=" " match_summaries} | sort -k1,1n \
       | awk -v OFS='\t' 'FNR == NR { nw[$1] = $2; next } { print $1, $2, $3, $4, nw[$1] + 0 }' \
-          weights_per_chrom.tsv - >> "~{out_prefix}.summary.tsv"
-    cat "~{out_prefix}.summary.tsv"
+          weights_per_chrom.tsv - >> "~{out_prefix}.prscs_summary.tsv"
+    cat "~{out_prefix}.prscs_summary.tsv"
   >>>
 
   output {
     File weights_with_ids = "~{out_prefix}.weights.tsv"
     File score_file = "~{out_prefix}.score.tsv"
-    File summary = "~{out_prefix}.summary.tsv"
+    File summary = "~{out_prefix}.prscs_summary.tsv"
   }
 
   runtime {
     docker: docker
     cpu: 1
     memory: "4 GB"
+    disks: "local-disk 20 SSD"
+    preemptible: preemptible
+  }
+}
+
+task copy_outputs {
+  input {
+    Array[File] files
+    String output_dir
+    String docker
+    Int preemptible
+  }
+
+  String dest = sub(output_dir, "/+$", "")
+
+  command <<<
+    set -euo pipefail
+    gcloud storage cp ~{sep=" " files} "~{dest}/"
+  >>>
+
+  runtime {
+    docker: docker
+    cpu: 1
+    memory: "2 GB"
     disks: "local-disk 20 SSD"
     preemptible: preemptible
   }
