@@ -47,7 +47,7 @@ def test_run_writes_inputs_then_submits(calls):
 
 
 def test_describe_takes_run_result(calls):
-    workflows.describe({"id": "1234-uuid", "status": "RUNNING"})
+    workflows.describe({"runId": "1234-uuid", "workflowUuid": "wf-uuid", "status": "RUNNING"})
     assert "--job-id=1234-uuid" in calls[0][0]
     with pytest.raises(ValueError):
         workflows.describe({"status": "RUNNING"})

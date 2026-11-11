@@ -109,7 +109,7 @@ def _job_uuid(job) -> str:
     """The job's UUID, from the dict `run` returned or a UUID string."""
     if isinstance(job, str):
         return job
-    for key in ("id", "jobId", "uuid", "jobUuid"):
+    for key in ("runId", "id", "jobId"):
         if job.get(key):
             return job[key]
     raise ValueError(f"No job id found in {list(job)}; pass the UUID shown by `wb workflow job list`")
