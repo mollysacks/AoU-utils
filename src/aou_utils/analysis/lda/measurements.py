@@ -7,7 +7,7 @@ source concepts are in the 'PPI' vocabulary, which is how we count PM records.
 import numpy as np
 import pandas as pd
 
-from . import bq
+from aou_utils import bq
 
 PERSON_MEDIANS_SQL = """
 WITH records AS (

@@ -12,6 +12,21 @@ The import name is `aou_utils`.
 - Notebooks aren't kept in the repo. Analysis code lives in the package; notebook cells that call it are pasted into the Workbench by hand.
 - This repo is **code only**. No participant-level data, outputs, or counts derived from the Workbench go in here (see `.gitignore`).
 
+## Layout
+
+```
+src/aou_utils/
+  env.py, bq.py, privacy.py, cnv.py   core helpers (workspace settings, BigQuery, small-count rules, CNV calls)
+  workflows.py                        upload / register / run WDLs with the `wb workflow` CLI
+  analysis/lda/                       LDA of EHR measurements across CNV groups (measurements, lda, plots)
+  array/pgs/                          polygenic scores from imputed array data (PRS-CS inputs, liftover)
+src/wdl/
+  prscs.wdl                           PRS-CS weights per chromosome -> plink2 score file
+  score_pgs.wdl                       plink2 --score per chromosome, summed genome-wide
+```
+
+The WDLs aren't part of the pip package. `aou_utils.workflows.upload_wdl` copies them from GitHub into the workspace bucket so they can be registered with `wb workflow create`.
+
 ## Installing on the Workbench
 
 In a notebook cell:

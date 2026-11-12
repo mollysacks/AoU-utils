@@ -6,7 +6,7 @@ matplotlib = pytest.importorskip("matplotlib")
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 
-from aou_utils.plots import dodged_hist  # noqa: E402
+from aou_utils.analysis.lda.plots import dodged_hist  # noqa: E402
 
 
 def test_dodged_hist_counts_and_layout():
@@ -23,7 +23,7 @@ def test_dodged_hist_counts_and_layout():
 
 
 def test_forest_draws_one_series_per_group():
-    from aou_utils.plots import forest
+    from aou_utils.analysis.lda.plots import forest
 
     effects = pd.DataFrame({
         "concept_id": [1, 2, 1, 2], "group": ["a", "a", "b", "b"],
@@ -37,7 +37,7 @@ def test_forest_draws_one_series_per_group():
 
 
 def test_profile_heatmap_orders_rows_and_labels_cells():
-    from aou_utils.plots import profile_heatmap
+    from aou_utils.analysis.lda.plots import profile_heatmap
 
     effects = pd.DataFrame({
         "concept_id": [1, 1, 2, 2, 3, 3], "group": ["a", "b"] * 3,
@@ -53,7 +53,7 @@ def test_profile_heatmap_orders_rows_and_labels_cells():
 
 
 def test_group_boxes_skips_empty_groups():
-    from aou_utils.plots import group_boxes
+    from aou_utils.analysis.lda.plots import group_boxes
 
     values = pd.Series([1.0, 2.0, 3.0, 10.0, 0.5, np.nan])
     groups = pd.Series(["NC", "NC", "NC", "a", "a", "b"])
@@ -65,7 +65,7 @@ def test_group_boxes_skips_empty_groups():
 
 
 def test_lda_biplot_bars_and_means():
-    from aou_utils.plots import lda_biplot
+    from aou_utils.analysis.lda.plots import lda_biplot
 
     rng = np.random.default_rng(0)
     scores = pd.DataFrame(rng.normal(size=(60, 2)), columns=["LD1", "LD2"])

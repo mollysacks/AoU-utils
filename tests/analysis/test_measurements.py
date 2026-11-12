@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import pytest
 
-from aou_utils import measurements
+from aou_utils.analysis.lda import measurements
 
 
 @pytest.fixture
