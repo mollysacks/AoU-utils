@@ -94,17 +94,33 @@ def test_person_medians_without_filters_is_unchanged(monkeypatch):
     assert seen["fmt"]["extra_filters"] == "" and set(seen["params"]) == {"person_ids", "min_people", "trim_permille"}
 
 
-def test_transform_gives_z_scores():
+@pytest.fixture
+def trait_data():
     rng = np.random.default_rng(2)
-    n = 2000
+    n = 4000
     idx = pd.Index(range(n), name="person_id")
     sex = pd.Series(np.where(rng.random(n) < 0.5, "Female", "Male"), index=idx)
     female = (sex == "Female").astype(float).rename("female")
     age = pd.Series(rng.uniform(20, 80, n), index=idx)
     values = pd.DataFrame({"height": 175 - 13 * female + rng.normal(0, 7, n),
-                           "bmi": np.exp(rng.normal(3.3, 0.2, n))}, index=idx)
+                           "bmi": np.exp(rng.normal(3.3, 0.25, n) + 0.1 * female)}, index=idx)
     ages = pd.DataFrame({"height": age, "bmi": age})
-    z, params = traits.transform(values, ages, sex, female.to_frame())
-    assert set(params.columns) == {"lambda_Female", "lambda_Male", "shift_Female", "shift_Male"}
+    return values, ages, sex, female
+
+
+def test_transform_residualizes_then_boxcox(trait_data):
+    from scipy import stats
+
+    values, ages, _, female = trait_data
+    z, params = traits.transform(values, ages, female.to_frame())
+    assert set(params.columns) == {"lambda", "shift"} and (params["shift"] > 0).all()  # residuals shifted
     assert z.mean().abs().max() < 1e-4 and (z.std() - 1).abs().max() < 1e-3
-    assert abs(np.corrcoef(z["height"], female)[0, 1]) < 1e-3
+    assert abs(np.corrcoef(z["height"], female)[0, 1]) < 0.02  # sex regressed out before Box-Cox
+    assert abs(stats.skew(z["bmi"])) < abs(stats.skew(values["bmi"])) / 3  # skew of log-normal BMI removed
+
+
+def test_transform_boxcox_by_group(trait_data):
+    values, ages, sex, female = trait_data
+    z, params = traits.transform(values, ages, female.to_frame(), groups=sex)
+    assert set(params.columns) == {"lambda_Female", "lambda_Male", "shift_Female", "shift_Male"}
+    assert z.notna().all().all()

@@ -29,12 +29,15 @@ def fetch(person_ids, traits: dict = None, min_age: float = 18, trim_permille: i
     return values, ages
 
 
-def transform(values: pd.DataFrame, ages: pd.DataFrame, sex: pd.Series, covariates: pd.DataFrame):
-    """Box-Cox each trait with lambda fit separately by sex, then regress out age, age² and
-    `covariates` (e.g. female indicator + PC1-10) and z-score the residuals.
+def transform(values: pd.DataFrame, ages: pd.DataFrame, covariates: pd.DataFrame, groups: pd.Series = None):
+    """Regress age, age² and `covariates` (e.g. female indicator + PC1-10) out of each trait, Box-Cox
+    the residuals, then z-score.
 
-    Returns (z, boxcox_params). People with no sex, or missing a covariate, get NaN.
+    Residuals are centered on 0, so Box-Cox shifts them by (1 - min) first (see `measurements.boxcox`).
+    `groups` (e.g. sex) fits lambda separately within each group; by default one lambda per trait.
+    Returns (z, boxcox_params). People missing a covariate (or a group, if given) get NaN.
     """
-    transformed, params = measurements.boxcox(values, groups=sex)
-    z = measurements.residualize(transformed, ages[transformed.columns], covariates)
-    return z, params
+    resid = measurements.residualize(values, ages[values.columns], covariates)
+    transformed, params = measurements.boxcox(resid, groups=groups)
+    z = (transformed - transformed.mean()) / transformed.std()
+    return z.astype("float32"), params
