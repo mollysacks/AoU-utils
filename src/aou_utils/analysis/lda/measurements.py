@@ -24,6 +24,7 @@ WITH records AS (
   WHERE m.person_id IN UNNEST(@person_ids)
     AND m.value_as_number IS NOT NULL
     AND m.measurement_concept_id != 0
+    {extra_filters}
 ),
 -- Keep only each concept's most common unit, rather than trying to convert between units
 top_unit AS (
@@ -63,22 +64,31 @@ WHERE concept_id IN (
 """
 
 
-def person_medians(person_ids, min_people: int = 1, trim_permille: int = 1) -> pd.DataFrame:
+def person_medians(person_ids, min_people: int = 1, trim_permille: int = 1, concept_ids=None,
+                   min_age: float = None) -> pd.DataFrame:
     """Per-person median of every numeric measurement, computed in BigQuery.
 
     For each concept, only records in its most common unit are used, and records outside its
     [trim_permille, 1000 - trim_permille] per-mille range are dropped as implausible. `age` is the
     median age across the same records. Concepts measured in fewer than `min_people` people are
     dropped. Returns one row per (person_id, concept_id).
+
+    `concept_ids` limits the query to those measurement concepts (much cheaper than pulling every
+    measurement). `min_age` drops records taken before that age (e.g. 18 for adult height).
     """
-    return bq.query(
-        PERSON_MEDIANS_SQL,
-        params={
-            "person_ids": list(person_ids),
-            "min_people": int(min_people),
-            "trim_permille": int(trim_permille),
-        },
-    )
+    params = {
+        "person_ids": list(person_ids),
+        "min_people": int(min_people),
+        "trim_permille": int(trim_permille),
+    }
+    filters = []
+    if concept_ids is not None:
+        params["concept_ids"] = [int(c) for c in concept_ids]
+        filters.append("AND m.measurement_concept_id IN UNNEST(@concept_ids)")
+    if min_age is not None:
+        params["min_age"] = float(min_age)
+        filters.append("AND DATE_DIFF(m.measurement_date, DATE(p.birth_datetime), DAY) / 365.25 >= @min_age")
+    return bq.query(PERSON_MEDIANS_SQL, params=params, extra_filters="\n    ".join(filters))
 
 
 def concept_names(concept_ids) -> pd.DataFrame:

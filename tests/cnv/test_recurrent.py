@@ -1,7 +1,7 @@
 import pandas as pd
 import pytest
 
-from aou_utils import cnv
+from aou_utils.cnv import recurrent
 
 
 @pytest.fixture
@@ -17,27 +17,27 @@ def calls():
 
 def test_classify_split_by_copy(calls):
     classes = {"mirror": ["1q21.1", "16p11.2_BP4-BP5"], "asymmetric": ["17q12"]}
-    groups = cnv.classify(calls, classes)
+    groups = recurrent.classify(calls, classes)
     assert groups.tolist()[:4] == ["NC", "mirror_DEL", "asymmetric_DUP", "multiple"]
     assert pd.isna(groups[5])
     assert groups[6] == "NC"  # unclassified CNVs don't count against NC
 
 
 def test_classify_pooled(calls):
-    groups = cnv.classify(calls, {"mirror": ["1q21.1", "16p11.2_BP4_BP5"]}, split_copy=False)
+    groups = recurrent.classify(calls, {"mirror": ["1q21.1", "16p11.2_BP4_BP5"]}, split_copy=False)
     assert groups[2] == "mirror" and groups[4] == "mirror"
 
 
 def test_match_loci_reports_missing(calls):
     with pytest.raises(KeyError, match="22q11.21"):
-        cnv.match_loci(["22q11.21_A-D"], calls.columns)
+        recurrent.match_loci(["22q11.21_A-D"], calls.columns)
 
 
 def test_load_calls_skips_metadata_and_oneway(tmp_path):
     path = tmp_path / "calls.csv"
     pd.DataFrame({"identifier": [1, 2], "PLATFORM": ["x", "y"], "16p11.2_BP4_BP5": [1, 2],
                   "16p11.2_BP4_BP5_oneway": [1, 2], "15q11.2-13.1_BP2_BP3": [2, 3]}).to_csv(path)
-    calls = cnv.load_calls(path)
+    calls = recurrent.load_calls(path)
     assert list(calls.columns) == ["16p11.2_BP4_BP5", "15q11.2-13.1_BP2_BP3"]
     assert calls.index.name == "person_id"
 
@@ -45,16 +45,16 @@ def test_load_calls_skips_metadata_and_oneway(tmp_path):
 def test_classify_exclude_loci(calls):
     # person 6 carries 3q29 only: NC without exclusion, 'excluded' when 3q29 is excluded
     classes = {"mirror": ["1q21.1", "16p11.2_BP4_BP5"], "asymmetric": ["17q12"]}
-    groups = cnv.classify(calls, classes, exclude=["3q29"])
+    groups = recurrent.classify(calls, classes, exclude=["3q29"])
     assert groups[6] == "excluded"
     assert groups[1] == "NC" and groups[2] == "mirror_DEL"
 
 
 def test_classify_allele_specific_loci(calls):
     # 17q12 counts only as a DUP: person 4's 17q12 DEL is the other allele, so they're excluded
-    groups = cnv.classify(calls, {"pos": ["1q21.1", "16p11.2_BP4_BP5:DEL"], "neg": ["17q12:DUP"]})
+    groups = recurrent.classify(calls, {"pos": ["1q21.1", "16p11.2_BP4_BP5:DEL"], "neg": ["17q12:DUP"]})
     assert groups[2] == "pos_DEL" and groups[3] == "neg_DUP"
     assert groups[4] == "excluded"
     assert groups[1] == "NC" and groups[6] == "NC" and pd.isna(groups[5])
     with pytest.raises(ValueError, match="DEL or DUP"):
-        cnv.classify(calls, {"pos": ["1q21.1:del"]})
+        recurrent.classify(calls, {"pos": ["1q21.1:del"]})

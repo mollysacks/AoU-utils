@@ -16,9 +16,13 @@ The import name is `aou_utils`.
 
 ```
 src/aou_utils/
-  env.py, bq.py, privacy.py, cnv.py   core helpers (workspace settings, BigQuery, small-count rules, CNV calls)
+  env.py, bq.py, privacy.py           core helpers (workspace settings, BigQuery, small-count rules)
+  covariates.py                       sex at birth, ancestry PCs
+  cnv/recurrent.py                    recurrent CNV genomatrix (person x locus copy number), CNV groups
+  cnv/segments.py                     segment-level CNV calls: filtering, merging, per-person Mb burden
   workflows.py                        upload / register / run WDLs with the `wb workflow` CLI
   analysis/lda/                       LDA of EHR measurements across CNV groups (measurements, lda, plots)
+  analysis/cnv_burden/                CNV burden (Mb) vs height / BMI (traits, models)
   array/pgs/                          polygenic scores from imputed array data (PRS-CS inputs, liftover)
 src/wdl/
   prscs.wdl                           PRS-CS weights per chromosome -> plink2 score file
