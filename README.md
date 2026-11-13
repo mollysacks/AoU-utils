@@ -20,6 +20,7 @@ src/aou_utils/
   covariates.py                       sex at birth, ancestry PCs
   cnv/recurrent.py                    recurrent CNV genomatrix (person x locus copy number), CNV groups
   cnv/segments.py                     segment-level CNV calls: filtering, merging, per-person Mb burden
+  cnv/summary.py                      per-sample array CNV summary: sample QC metrics, per-person burden
   workflows.py                        upload / register / run WDLs with the `wb workflow` CLI
   analysis/lda/                       LDA of EHR measurements across CNV groups (measurements, lda, plots)
   analysis/cnv_burden/                CNV burden (Mb) vs height / BMI (traits, models)
