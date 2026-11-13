@@ -45,7 +45,7 @@ def standardize(calls: pd.DataFrame, person_id: str = "person_id", chrom: str = 
     dups = {str(v).upper() for v in dup_values}
     out["type"] = np.select([np.isin(raw_type, list(dels)), np.isin(raw_type, list(dups))],
                             ["DEL", "DUP"], default="")
-    out = out[out["type"] != ""].reset_index(drop=True)
+    out = out.loc[out["type"] != "", COLUMNS + list(extra or {})].reset_index(drop=True)
     bad = out["end"] <= out["start"]
     if bad.any():
         raise ValueError(f"{int(bad.sum())} CNVs have end <= start")
