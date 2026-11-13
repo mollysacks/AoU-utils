@@ -1,8 +1,10 @@
 """Segment-level CNV calls and per-person CNV burden.
 
 Calls are a DataFrame with one row per CNV and the columns in `COLUMNS`:
-person_id, chrom ('1'..'22', 'X', 'Y'; no 'chr' prefix), start, end (bp, end > start), type ('DEL'/'DUP').
-`standardize` builds that from a table with other column names or codings.
+person_id, chrom ('1'..'22', 'X', 'Y'; no 'chr' prefix), start, end (bp, end > start), type ('DEL'/'DUP'),
+optionally followed by extra columns such as `sites` (number of probes) and `score`.
+`read_plink_cnv` reads array calls in PLINK .cnv format (as in the PGC CNV pipeline); `standardize`
+builds the standard table from other column names or codings.
 """
 
 import numpy as np
@@ -21,12 +23,14 @@ def _chrom(values: pd.Series) -> pd.Series:
 
 def standardize(calls: pd.DataFrame, person_id: str = "person_id", chrom: str = "chrom",
                 start: str = "start", end: str = "end", type: str = "type",
-                del_values=("DEL",), dup_values=("DUP",)) -> pd.DataFrame:
+                del_values=("DEL",), dup_values=("DUP",), extra: dict = None) -> pd.DataFrame:
     """Rename and recode a table of CNV calls to the standard `COLUMNS`.
 
     `del_values` / `dup_values` are the values of the `type` column that mean a deletion or a
     duplication (e.g. copy numbers (0, 1) and (3, 4) for a PLINK .cnv TYPE column). They are compared
     as strings, case-insensitively. Rows of any other type are dropped. Raises if a CNV has end <= start.
+    `extra` maps new column names to source columns to keep after the standard ones, e.g.
+    {"sites": "SITES"}.
     """
     out = pd.DataFrame({
         "person_id": calls[person_id].to_numpy(),
@@ -34,6 +38,8 @@ def standardize(calls: pd.DataFrame, person_id: str = "person_id", chrom: str = 
         "start": calls[start].astype("int64").to_numpy(),
         "end": calls[end].astype("int64").to_numpy(),
     })
+    for new, source in (extra or {}).items():
+        out[new] = calls[source].to_numpy()
     raw_type = calls[type].astype(str).str.strip().str.upper().to_numpy()
     dels = {str(v).upper() for v in del_values}
     dups = {str(v).upper() for v in dup_values}
@@ -46,19 +52,37 @@ def standardize(calls: pd.DataFrame, person_id: str = "person_id", chrom: str = 
     return out
 
 
+def read_plink_cnv(path, del_values=(0, 1), dup_values=(3, 4), int_ids: bool = True) -> pd.DataFrame:
+    """PLINK .cnv file (FID IID CHR BP1 BP2 TYPE SCORE SITES; whitespace-delimited) -> standard calls.
+
+    TYPE is the copy number: `del_values` count as deletions and `dup_values` as duplications.
+    person_id is the IID, converted to int64 (raises if an IID isn't numeric) unless int_ids=False.
+    SCORE and SITES are kept as `score` and `sites` when present.
+    """
+    raw = pd.read_csv(path, sep=r"\s+")
+    extra = {new: old for new, old in (("score", "SCORE"), ("sites", "SITES")) if old in raw.columns}
+    calls = standardize(raw, person_id="IID", chrom="CHR", start="BP1", end="BP2", type="TYPE",
+                        del_values=del_values, dup_values=dup_values, extra=extra)
+    if int_ids:
+        calls["person_id"] = calls["person_id"].astype("int64")
+    return calls
+
+
 def sizes(calls: pd.DataFrame) -> pd.Series:
     """Length of each CNV in bp."""
     return calls["end"] - calls["start"]
 
 
-def filter_calls(calls: pd.DataFrame, min_size: int = 0, max_size: int = None,
+def filter_calls(calls: pd.DataFrame, min_size: int = 0, max_size: int = None, min_sites: int = 0,
                  chroms=AUTOSOMES, types=TYPES, people=None) -> pd.DataFrame:
-    """Keep CNVs with min_size <= length (bp) [<= max_size], on `chroms`, of `types`, and (if given)
-    carried by `people`."""
+    """Keep CNVs with min_size <= length (bp) [<= max_size], at least `min_sites` probes (needs a
+    `sites` column), on `chroms`, of `types`, and (if given) carried by `people`."""
     length = sizes(calls)
     keep = (length >= min_size) & calls["chrom"].isin([str(c) for c in chroms]) & calls["type"].isin(types)
     if max_size is not None:
         keep &= length <= max_size
+    if min_sites:
+        keep &= calls["sites"] >= min_sites
     if people is not None:
         keep &= calls["person_id"].isin(people)
     return calls[keep].reset_index(drop=True)
@@ -98,6 +122,9 @@ def burden(calls: pd.DataFrame, people) -> pd.DataFrame:
     people = pd.Index(people, name="person_id")
     if not people.is_unique:
         raise ValueError("people has duplicate IDs")
+    if len(calls) and not calls["person_id"].isin(people).any():
+        raise ValueError("None of the CNV carriers are in `people`: check that the IDs match "
+                         f"(calls: {calls['person_id'].dtype}, people: {people.dtype})")
     merged = merge_overlaps(calls[calls["person_id"].isin(people)])
     merged["mb"] = sizes(merged) / 1e6
     mb = merged.pivot_table(index="person_id", columns="type", values="mb", aggfunc="sum")

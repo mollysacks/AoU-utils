@@ -69,3 +69,25 @@ def test_burden_with_no_calls_or_one_type():
 def test_burden_rejects_duplicate_people():
     with pytest.raises(ValueError, match="duplicate"):
         segments.burden(calls([]), people=[1, 1])
+
+
+def test_read_plink_cnv(tmp_path):
+    path = tmp_path / "calls.cnv"
+    path.write_text(
+        "     FID       IID  CHR         BP1         BP2  TYPE   SCORE  SITES\n"
+        "  fam1   1000001    1      100000      300000     1   12.5     20\n"
+        "  fam1   1000001   16    29500000    30200000     3   30.1     95\n"
+        "  fam2   1000002   23     5000000     5100000     0    8.0      7\n"
+        "  fam3   1000003    2      100000      200000     2    1.0      5\n"
+    )
+    c = segments.read_plink_cnv(path)
+    assert list(c.columns) == segments.COLUMNS + ["score", "sites"]
+    assert c["person_id"].dtype == "int64" and c["person_id"].tolist() == [1000001, 1000001, 1000002]
+    assert c["type"].tolist() == ["DEL", "DUP", "DEL"] and c["chrom"].tolist() == ["1", "16", "X"]
+    assert len(segments.filter_calls(c, min_sites=10, chroms=segments.AUTOSOMES + ("X",))) == 2
+
+
+def test_burden_rejects_mismatched_ids():
+    c = calls([["1000001", "1", 0, 1_000_000, "DEL"]])  # string IDs vs integer people
+    with pytest.raises(ValueError, match="IDs match"):
+        segments.burden(c, people=[1000001, 1000002])
