@@ -47,3 +47,12 @@ def test_read_rejects_duplicate_ids(tmp_path):
     pd.DataFrame({"identifier": [1, 1], "LRR_SD": [0.1, 0.2]}).to_csv(p, sep="\t", index=False)
     with pytest.raises(ValueError, match="duplicate"):
         summary.read(p)
+
+
+def test_burden_keeps_blanks_missing(tmp_path):
+    p = tmp_path / "blank.txt"
+    pd.DataFrame({"identifier": [1, 2], "Num_Auto_Del": [2, np.nan], "Num_Auto_Dup": [0, np.nan],
+                  "Len_Auto_Del": [300_000, np.nan], "Len_Auto_Dup": [0, np.nan]}).to_csv(p, sep="\t", index=False)
+    b = summary.burden(summary.read(p))
+    assert b.loc[1, "del_n"] == 2 and b.loc[1, "cnv_mb"] == pytest.approx(0.3)
+    assert b.loc[2].isna().all()

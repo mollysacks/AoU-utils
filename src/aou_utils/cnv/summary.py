@@ -28,6 +28,9 @@ def burden(summary: pd.DataFrame, people=None) -> pd.DataFrame:
     """Autosomal CNV burden in the same columns as `aou_utils.cnv.segments.burden`:
     del_mb, dup_mb, cnv_mb, del_n, dup_n, cnv_n. Optionally limited to (and ordered by) `people`,
     who must all be in the summary.
+
+    Blank counts or lengths stay missing (NaN / <NA>), so those people drop out of the models; they
+    are not assumed to be 0. Counts are nullable integers (Int64).
     """
     if people is not None:
         people = pd.Index(people, name="person_id")
@@ -39,8 +42,8 @@ def burden(summary: pd.DataFrame, people=None) -> pd.DataFrame:
     out["del_mb"] = summary[_BURDEN["del_len"]].astype("float64") / 1e6
     out["dup_mb"] = summary[_BURDEN["dup_len"]].astype("float64") / 1e6
     out["cnv_mb"] = out["del_mb"] + out["dup_mb"]
-    out["del_n"] = summary[_BURDEN["del_n"]].astype("int64")
-    out["dup_n"] = summary[_BURDEN["dup_n"]].astype("int64")
+    out["del_n"] = summary[_BURDEN["del_n"]].astype("Int64")
+    out["dup_n"] = summary[_BURDEN["dup_n"]].astype("Int64")
     out["cnv_n"] = out["del_n"] + out["dup_n"]
     return out
 
