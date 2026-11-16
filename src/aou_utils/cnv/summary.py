@@ -17,7 +17,7 @@ _BURDEN = {"del_n": "Num_Auto_Del", "dup_n": "Num_Auto_Dup",
 
 def read(path, id_col: str = "identifier") -> pd.DataFrame:
     """Read the tab-separated summary, indexed by person_id (int64). Raises on duplicate IDs."""
-    df = pd.read_csv(path, sep="\t")
+    df = pd.read_csv(path, sep="\t", low_memory=False)  # Chrm_aberrationFreq_Calc has mixed types
     df.index = pd.Index(df.pop(id_col).astype("int64"), name="person_id")
     if not df.index.is_unique:
         raise ValueError(f"{path} has duplicate {id_col} values")
