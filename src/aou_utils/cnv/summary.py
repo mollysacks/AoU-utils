@@ -10,9 +10,19 @@ import pandas as pd
 QC_METRICS = ["LRR_mean", "LRR_median", "LRR_SD", "BAF_mean", "BAF_median", "BAF_SD", "BAF_DRIFT",
               "WF", "GCWF", "Num_CNVs"]
 
-# burden column -> summary column (lengths are in bp)
-_BURDEN = {"del_n": "Num_Auto_Del", "dup_n": "Num_Auto_Dup",
-           "del_len": "Len_Auto_Del", "dup_len": "Len_Auto_Dup"}
+# burden column -> (summary column, totals column that is filled in even with no CNVs); lengths in bp.
+# The pipeline leaves Num_*/Len_* blank for people with no CNVs, while totalAuto* has 0.
+_BURDEN = {"del_n": ("Num_Auto_Del", "totalAutoDels"), "dup_n": ("Num_Auto_Dup", "totalAutoDups"),
+           "del_len": ("Len_Auto_Del", "totalAutoDelsLength"), "dup_len": ("Len_Auto_Dup", "totalAutoDupsLength")}
+
+
+def _column(summary: pd.DataFrame, key: str) -> pd.Series:
+    """Summary column for `key`, with blanks set to 0 where the totals column confirms 0."""
+    col, total = _BURDEN[key]
+    x = summary[col].astype("float64")
+    if total in summary.columns:
+        x = x.mask(x.isna() & summary[total].eq(0), 0.0)
+    return x
 
 
 def read(path, id_col: str = "identifier") -> pd.DataFrame:
@@ -29,8 +39,9 @@ def burden(summary: pd.DataFrame, people=None) -> pd.DataFrame:
     del_mb, dup_mb, cnv_mb, del_n, dup_n, cnv_n. Optionally limited to (and ordered by) `people`,
     who must all be in the summary.
 
-    Blank counts or lengths stay missing (NaN / <NA>), so those people drop out of the models; they
-    are not assumed to be 0. Counts are nullable integers (Int64).
+    The pipeline leaves Num_Auto_*/Len_Auto_* blank for people with no CNVs; those blanks become 0
+    when the matching totalAuto* column is 0. Any other blank stays missing (NaN / <NA>), so that
+    person drops out of the models. Counts are nullable integers (Int64).
     """
     if people is not None:
         people = pd.Index(people, name="person_id")
@@ -39,11 +50,11 @@ def burden(summary: pd.DataFrame, people=None) -> pd.DataFrame:
             raise KeyError(f"{len(missing)} people aren't in the CNV summary")
         summary = summary.loc[people]
     out = pd.DataFrame(index=summary.index)
-    out["del_mb"] = summary[_BURDEN["del_len"]].astype("float64") / 1e6
-    out["dup_mb"] = summary[_BURDEN["dup_len"]].astype("float64") / 1e6
+    out["del_mb"] = _column(summary, "del_len") / 1e6
+    out["dup_mb"] = _column(summary, "dup_len") / 1e6
     out["cnv_mb"] = out["del_mb"] + out["dup_mb"]
-    out["del_n"] = summary[_BURDEN["del_n"]].astype("Int64")
-    out["dup_n"] = summary[_BURDEN["dup_n"]].astype("Int64")
+    out["del_n"] = _column(summary, "del_n").astype("Int64")
+    out["dup_n"] = _column(summary, "dup_n").astype("Int64")
     out["cnv_n"] = out["del_n"] + out["dup_n"]
     return out
 
