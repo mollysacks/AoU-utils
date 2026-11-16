@@ -27,3 +27,13 @@ def test_sex_at_birth_and_indicator(monkeypatch):
     assert sex.loc[2] == "Male"
     female = covariates.female_indicator(sex)
     assert female.loc[1] == 1.0 and female.loc[2] == 0.0 and np.isnan(female.loc[3])
+
+
+def test_read_flashpca(tmp_path):
+    path = tmp_path / "eur.unrelated.pcs.txt"
+    path.write_text("FID\tIID\tPC1\tPC2\tPC3\n0\t1001\t0.01\t-0.02\t0.5\n0\t1002\t-0.03\t0.04\t0.1\n")
+    out = covariates.read_flashpca(path, n_pcs=2)
+    assert out.index.tolist() == [1001, 1002] and out.index.name == "person_id"
+    assert list(out.columns) == ["PC1", "PC2"] and out.loc[1002, "PC2"] == pytest.approx(0.04)
+    with pytest.raises(ValueError, match="PC4"):
+        covariates.read_flashpca(path, n_pcs=4)

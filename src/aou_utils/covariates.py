@@ -1,5 +1,5 @@
 """Standard covariates: sex at birth (from the CDR) and genetic ancestry PCs (from the srWGS
-ancestry predictions file)."""
+ancestry predictions file, or from a flashpca run)."""
 
 import re
 
@@ -47,4 +47,19 @@ def read_ancestry(path, n_pcs: int = 10, id_col: str = "research_id",
     out = pd.DataFrame(pcs[:, :n_pcs], columns=[f"PC{i + 1}" for i in range(n_pcs)],
                        index=pd.Index(df[id_col].to_numpy(), name="person_id"))
     out.insert(0, "ancestry", df[ancestry_col].to_numpy())
+    return out
+
+
+def read_flashpca(path, n_pcs: int = 10, id_col: str = "IID") -> pd.DataFrame:
+    """flashpca PCs file (FID IID PC1 PC2 ...; whitespace-delimited, e.g. eur.unrelated.pcs.txt)
+    -> DataFrame indexed by person_id (the IID, as int64) with PC1..PC<n_pcs>."""
+    df = pd.read_csv(path, sep=r"\s+")
+    cols = [f"PC{i + 1}" for i in range(n_pcs)]
+    missing = [c for c in cols if c not in df.columns]
+    if missing:
+        raise ValueError(f"{path} is missing {missing}")
+    out = df[cols].astype("float64")
+    out.index = pd.Index(df[id_col].astype("int64").to_numpy(), name="person_id")
+    if not out.index.is_unique:
+        raise ValueError(f"{path} has duplicate {id_col} values")
     return out
